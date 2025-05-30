@@ -8,10 +8,11 @@ export const useSpeechRecognition = (
 ) => {
   const [isRecording, setIsRecording] = useState(false);
   const [currentTranscript, setCurrentTranscript] = useState('');
+  const [shouldAutoRestart, setShouldAutoRestart] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const { toast } = useToast();
 
-  console.log('useSpeechRecognition: isAISpeaking =', isAISpeaking, 'isRecording =', isRecording);
+  console.log('useSpeechRecognition: isAISpeaking =', isAISpeaking, 'isRecording =', isRecording, 'shouldAutoRestart =', shouldAutoRestart);
 
   useEffect(() => {
     console.log('useSpeechRecognition: Initializing speech recognition...');
@@ -26,7 +27,6 @@ export const useSpeechRecognition = (
       recognitionRef.current.onresult = (event) => {
         console.log('Speech recognition result received, isAISpeaking:', isAISpeaking);
         
-        // Don't process results if AI is speaking
         if (isAISpeaking) {
           console.log('Ignoring speech recognition because AI is speaking');
           return;
@@ -53,7 +53,7 @@ export const useSpeechRecognition = (
       };
 
       recognitionRef.current.onend = () => {
-        console.log('Speech recognition ended');
+        console.log('Speech recognition ended, shouldAutoRestart:', shouldAutoRestart, 'isAISpeaking:', isAISpeaking);
         setIsRecording(false);
         setCurrentTranscript('');
       };
@@ -76,12 +76,27 @@ export const useSpeechRecognition = (
         recognitionRef.current.stop();
       }
     };
-  }, []); // Remove dependencies to prevent re-initialization
+  }, [onTranscriptComplete, toast]);
+
+  // Auto-restart recording when AI finishes speaking
+  useEffect(() => {
+    if (!isAISpeaking && shouldAutoRestart && recognitionRef.current) {
+      console.log('Auto-restarting recording after AI finished speaking');
+      setTimeout(() => {
+        if (recognitionRef.current && !isAISpeaking) {
+          recognitionRef.current.start();
+          setIsRecording(true);
+          setShouldAutoRestart(false);
+        }
+      }, 500); // Small delay to ensure AI has completely finished
+    }
+  }, [isAISpeaking, shouldAutoRestart]);
 
   // Stop recording when AI starts speaking
   useEffect(() => {
     if (isAISpeaking && isRecording && recognitionRef.current) {
       console.log('Stopping recording because AI started speaking');
+      setShouldAutoRestart(true); // Mark for auto-restart
       recognitionRef.current.stop();
       setIsRecording(false);
       setCurrentTranscript('');
@@ -100,7 +115,6 @@ export const useSpeechRecognition = (
       return;
     }
 
-    // Don't allow recording while AI is speaking
     if (isAISpeaking) {
       toast({
         title: "Please Wait",
@@ -114,10 +128,12 @@ export const useSpeechRecognition = (
       console.log('Stopping recording');
       recognitionRef.current.stop();
       setIsRecording(false);
+      setShouldAutoRestart(false);
     } else {
       console.log('Starting recording');
       recognitionRef.current.start();
       setIsRecording(true);
+      setShouldAutoRestart(false);
     }
   };
 

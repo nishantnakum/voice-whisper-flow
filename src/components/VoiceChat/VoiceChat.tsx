@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MessageCircle } from 'lucide-react';
@@ -22,7 +21,6 @@ const VoiceChat = () => {
   const handleUserMessage = useCallback(async (text: string) => {
     console.log('handleUserMessage called with:', text, 'isPlaying:', isPlaying);
     
-    // Don't process if AI is currently speaking
     if (isPlaying) {
       console.log('Skipping message processing because AI is speaking');
       return;
@@ -36,12 +34,15 @@ const VoiceChat = () => {
     };
 
     console.log('Adding user message:', userMessage);
-    setMessages(prev => [...prev, userMessage]);
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setIsProcessing(true);
 
     try {
-      console.log('Calling generateAIResponse...');
-      const aiResponse = await generateAIResponse(text);
+      console.log('Calling generateAIResponse with history...');
+      // Pass recent chat history (last 10 messages to keep context manageable)
+      const recentHistory = updatedMessages.slice(-10);
+      const aiResponse = await generateAIResponse(text, recentHistory);
       console.log('AI response received:', aiResponse);
       
       const aiMessage: Message = {
@@ -54,7 +55,6 @@ const VoiceChat = () => {
       setMessages(prev => [...prev, aiMessage]);
       setIsProcessing(false);
       
-      // Speak the AI response
       console.log('Speaking AI response...');
       speakText(aiResponse);
     } catch (error) {
@@ -68,7 +68,7 @@ const VoiceChat = () => {
       setMessages(prev => [...prev, errorMessage]);
       setIsProcessing(false);
     }
-  }, [speakText, isPlaying]);
+  }, [speakText, isPlaying, messages]);
 
   const { isRecording, currentTranscript, toggleRecording } = useSpeechRecognition(
     handleUserMessage, 
