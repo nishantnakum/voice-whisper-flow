@@ -11,7 +11,11 @@ export const useSpeechRecognition = (
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const { toast } = useToast();
 
+  console.log('useSpeechRecognition: isAISpeaking =', isAISpeaking, 'isRecording =', isRecording);
+
   useEffect(() => {
+    console.log('useSpeechRecognition: Initializing speech recognition...');
+    
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
@@ -20,8 +24,11 @@ export const useSpeechRecognition = (
       recognitionRef.current.lang = 'en-US';
 
       recognitionRef.current.onresult = (event) => {
+        console.log('Speech recognition result received, isAISpeaking:', isAISpeaking);
+        
         // Don't process results if AI is speaking
         if (isAISpeaking) {
+          console.log('Ignoring speech recognition because AI is speaking');
           return;
         }
 
@@ -40,11 +47,13 @@ export const useSpeechRecognition = (
         setCurrentTranscript(finalTranscript + interimTranscript);
 
         if (finalTranscript && !isAISpeaking) {
+          console.log('Calling onTranscriptComplete with:', finalTranscript);
           onTranscriptComplete(finalTranscript);
         }
       };
 
       recognitionRef.current.onend = () => {
+        console.log('Speech recognition ended');
         setIsRecording(false);
         setCurrentTranscript('');
       };
@@ -58,6 +67,8 @@ export const useSpeechRecognition = (
         });
         setIsRecording(false);
       };
+    } else {
+      console.log('Speech recognition not supported');
     }
 
     return () => {
@@ -65,11 +76,12 @@ export const useSpeechRecognition = (
         recognitionRef.current.stop();
       }
     };
-  }, [onTranscriptComplete, toast, isAISpeaking]);
+  }, []); // Remove dependencies to prevent re-initialization
 
   // Stop recording when AI starts speaking
   useEffect(() => {
     if (isAISpeaking && isRecording && recognitionRef.current) {
+      console.log('Stopping recording because AI started speaking');
       recognitionRef.current.stop();
       setIsRecording(false);
       setCurrentTranscript('');
@@ -77,6 +89,8 @@ export const useSpeechRecognition = (
   }, [isAISpeaking, isRecording]);
 
   const toggleRecording = () => {
+    console.log('toggleRecording called, current state:', { isRecording, isAISpeaking });
+    
     if (!recognitionRef.current) {
       toast({
         title: "Not Supported",
@@ -97,9 +111,11 @@ export const useSpeechRecognition = (
     }
 
     if (isRecording) {
+      console.log('Stopping recording');
       recognitionRef.current.stop();
       setIsRecording(false);
     } else {
+      console.log('Starting recording');
       recognitionRef.current.start();
       setIsRecording(true);
     }

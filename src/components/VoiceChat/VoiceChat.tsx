@@ -12,14 +12,19 @@ import { MessageList } from './MessageList';
 import { Message } from './types';
 
 const VoiceChat = () => {
+  console.log('VoiceChat component rendering...');
+  
   const [messages, setMessages] = useState<Message[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const { speakText, stopSpeaking, isPlaying } = useSpeechSynthesis();
 
   const handleUserMessage = useCallback(async (text: string) => {
+    console.log('handleUserMessage called with:', text, 'isPlaying:', isPlaying);
+    
     // Don't process if AI is currently speaking
     if (isPlaying) {
+      console.log('Skipping message processing because AI is speaking');
       return;
     }
 
@@ -30,11 +35,15 @@ const VoiceChat = () => {
       timestamp: new Date(),
     };
 
+    console.log('Adding user message:', userMessage);
     setMessages(prev => [...prev, userMessage]);
     setIsProcessing(true);
 
     try {
+      console.log('Calling generateAIResponse...');
       const aiResponse = await generateAIResponse(text);
+      console.log('AI response received:', aiResponse);
+      
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
@@ -46,6 +55,7 @@ const VoiceChat = () => {
       setIsProcessing(false);
       
       // Speak the AI response
+      console.log('Speaking AI response...');
       speakText(aiResponse);
     } catch (error) {
       console.error('Error generating AI response:', error);
@@ -64,6 +74,14 @@ const VoiceChat = () => {
     handleUserMessage, 
     isPlaying
   );
+
+  console.log('VoiceChat state:', { 
+    messagesCount: messages.length, 
+    isProcessing, 
+    isRecording, 
+    isPlaying,
+    currentTranscript 
+  });
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
