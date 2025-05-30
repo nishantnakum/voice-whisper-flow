@@ -3,14 +3,17 @@ import { useState, useRef, useEffect } from 'react';
 
 export const useElevenLabsSpeech = () => {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [apiKey, setApiKey] = useState('');
+  const [apiKey, setApiKey] = useState('ap2_44f2896a-adec-4b81-8154-f075b91214fe');
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Load API key from localStorage on mount
+  // Load API key from localStorage on mount, but default to provided key
   useEffect(() => {
     const savedApiKey = localStorage.getItem('elevenlabs-api-key');
     if (savedApiKey) {
       setApiKey(savedApiKey);
+    } else {
+      // Set the provided API key as default and save it
+      localStorage.setItem('elevenlabs-api-key', 'ap2_44f2896a-adec-4b81-8154-f075b91214fe');
     }
   }, []);
 
@@ -32,6 +35,7 @@ export const useElevenLabsSpeech = () => {
       // Add natural human expressions to the text
       const enhancedText = addHumanExpressions(text);
       console.log('Enhanced text for ElevenLabs:', enhancedText);
+      console.log('Using API key:', apiKey.substring(0, 10) + '...');
       
       // Use Aria voice ID (9BWtsMINqrJLrRacOk9x) which is a reliable default
       const response = await fetch('https://api.elevenlabs.io/v1/text-to-speech/9BWtsMINqrJLrRacOk9x', {
@@ -59,14 +63,12 @@ export const useElevenLabsSpeech = () => {
         
         if (response.status === 401) {
           console.error('Invalid API key. Please check your ElevenLabs API key.');
-          // Clear the invalid API key
-          localStorage.removeItem('elevenlabs-api-key');
-          setApiKey('');
         }
         
         throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
       }
 
+      console.log('ElevenLabs API response successful, creating audio...');
       const audioBlob = await response.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
       
@@ -76,6 +78,7 @@ export const useElevenLabsSpeech = () => {
       
       audioRef.current = new Audio(audioUrl);
       audioRef.current.onended = () => {
+        console.log('Audio playback ended');
         setIsPlaying(false);
         URL.revokeObjectURL(audioUrl);
       };
@@ -85,8 +88,9 @@ export const useElevenLabsSpeech = () => {
         URL.revokeObjectURL(audioUrl);
       };
       
-      console.log('Playing audio...');
+      console.log('Starting audio playback...');
       await audioRef.current.play();
+      console.log('Audio is now playing');
     } catch (error) {
       console.error('Error with ElevenLabs TTS:', error);
       setIsPlaying(false);
