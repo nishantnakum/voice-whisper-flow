@@ -18,6 +18,11 @@ const VoiceChat = () => {
   const { speakText, stopSpeaking, isPlaying } = useSpeechSynthesis();
 
   const handleUserMessage = useCallback(async (text: string) => {
+    // Don't process if AI is currently speaking
+    if (isPlaying) {
+      return;
+    }
+
     const userMessage: Message = {
       id: Date.now().toString(),
       type: 'user',
@@ -53,9 +58,12 @@ const VoiceChat = () => {
       setMessages(prev => [...prev, errorMessage]);
       setIsProcessing(false);
     }
-  }, [speakText]);
+  }, [speakText, isPlaying]);
 
-  const { isRecording, currentTranscript, toggleRecording } = useSpeechRecognition(handleUserMessage);
+  const { isRecording, currentTranscript, toggleRecording } = useSpeechRecognition(
+    handleUserMessage, 
+    isPlaying
+  );
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">

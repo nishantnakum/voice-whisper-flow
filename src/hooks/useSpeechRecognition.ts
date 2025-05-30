@@ -2,7 +2,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
-export const useSpeechRecognition = (onTranscriptComplete: (text: string) => void) => {
+export const useSpeechRecognition = (
+  onTranscriptComplete: (text: string) => void,
+  isAISpeaking: boolean = false
+) => {
   const [isRecording, setIsRecording] = useState(false);
   const [currentTranscript, setCurrentTranscript] = useState('');
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -17,6 +20,11 @@ export const useSpeechRecognition = (onTranscriptComplete: (text: string) => voi
       recognitionRef.current.lang = 'en-US';
 
       recognitionRef.current.onresult = (event) => {
+        // Don't process results if AI is speaking
+        if (isAISpeaking) {
+          return;
+        }
+
         let finalTranscript = '';
         let interimTranscript = '';
 
@@ -31,7 +39,7 @@ export const useSpeechRecognition = (onTranscriptComplete: (text: string) => voi
 
         setCurrentTranscript(finalTranscript + interimTranscript);
 
-        if (finalTranscript) {
+        if (finalTranscript && !isAISpeaking) {
           onTranscriptComplete(finalTranscript);
         }
       };
@@ -57,7 +65,16 @@ export const useSpeechRecognition = (onTranscriptComplete: (text: string) => voi
         recognitionRef.current.stop();
       }
     };
-  }, [onTranscriptComplete, toast]);
+  }, [onTranscriptComplete, toast, isAISpeaking]);
+
+  // Stop recording when AI starts speaking
+  useEffect(() => {
+    if (isAISpeaking && isRecording && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setIsRecording(false);
+      setCurrentTranscript('');
+    }
+  }, [isAISpeaking, isRecording]);
 
   const toggleRecording = () => {
     if (!recognitionRef.current) {
@@ -65,6 +82,16 @@ export const useSpeechRecognition = (onTranscriptComplete: (text: string) => voi
         title: "Not Supported",
         description: "Speech recognition is not supported in your browser.",
         variant: "destructive",
+      });
+      return;
+    }
+
+    // Don't allow recording while AI is speaking
+    if (isAISpeaking) {
+      toast({
+        title: "Please Wait",
+        description: "Please wait for the AI to finish speaking before recording.",
+        variant: "default",
       });
       return;
     }
