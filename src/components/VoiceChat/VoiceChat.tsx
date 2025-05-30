@@ -20,15 +20,6 @@ const VoiceChat = () => {
 
   const { speakText, stopSpeaking, isPlaying, setApiKey, apiKey } = useElevenLabsSpeech();
 
-  // Show API key input if not set
-  if (!apiKey) {
-    return (
-      <div className="max-w-4xl mx-auto p-6">
-        <ApiKeyInput onApiKeySet={setApiKey} />
-      </div>
-    );
-  }
-
   const handleUserMessage = useCallback(async (text: string) => {
     console.log('handleUserMessage called with:', text, 'isPlaying:', isPlaying);
     
@@ -93,6 +84,15 @@ const VoiceChat = () => {
     isPlaying,
     currentTranscript 
   });
+
+  // Show API key input if not set
+  if (!apiKey) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <ApiKeyInput onApiKeySet={setApiKey} />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
