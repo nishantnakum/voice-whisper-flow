@@ -1,9 +1,9 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Mic, MicOff, Volume2, VolumeX, MessageCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { generateAIResponse } from '@/utils/geminiApi';
 
 interface Message {
   id: string;
@@ -113,9 +113,8 @@ const VoiceChat = () => {
     setMessages(prev => [...prev, userMessage]);
     setIsProcessing(true);
 
-    // Simulate AI processing delay
-    setTimeout(() => {
-      const aiResponse = generateAIResponse(text);
+    try {
+      const aiResponse = await generateAIResponse(text);
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
@@ -128,21 +127,17 @@ const VoiceChat = () => {
       
       // Speak the AI response
       speakText(aiResponse);
-    }, 1000);
-  };
-
-  const generateAIResponse = (userText: string): string => {
-    const responses = [
-      "That's an interesting point you've made. Could you tell me more about that?",
-      "I understand what you're saying. Here's what I think about that topic.",
-      "Thanks for sharing that with me. I'd like to explore this further.",
-      "That's a great question! Let me think about the best way to answer that.",
-      "I appreciate you bringing that up. It's definitely worth discussing.",
-      "Based on what you've said, I think we should consider multiple perspectives.",
-      "That's a fascinating topic. I'd love to dive deeper into that with you.",
-    ];
-    
-    return responses[Math.floor(Math.random() * responses.length)];
+    } catch (error) {
+      console.error('Error generating AI response:', error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        text: "I'm sorry, I encountered an error. Please try again.",
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
+      setIsProcessing(false);
+    }
   };
 
   const speakText = (text: string) => {
