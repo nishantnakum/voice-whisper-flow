@@ -1,5 +1,5 @@
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
 export const useSpeechRecognition = (
@@ -12,7 +12,14 @@ export const useSpeechRecognition = (
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const { toast } = useToast();
 
-  console.log('useSpeechRecognition: isAISpeaking =', isAISpeaking, 'isRecording =', isRecording, 'shouldAutoRestart =', shouldAutoRestart);
+  console.log('useSpeechRecognition: isAISpeaking =', isAISpeaking, 'isRecording =', isRecording);
+
+  // Stable callback to avoid re-creating the function on each render
+  const handleTranscriptComplete = useCallback((text: string) => {
+    if (!isAISpeaking) {
+      onTranscriptComplete(text);
+    }
+  }, [onTranscriptComplete, isAISpeaking]);
 
   useEffect(() => {
     console.log('useSpeechRecognition: Initializing speech recognition...');
@@ -48,12 +55,12 @@ export const useSpeechRecognition = (
 
         if (finalTranscript && !isAISpeaking) {
           console.log('Calling onTranscriptComplete with:', finalTranscript);
-          onTranscriptComplete(finalTranscript);
+          handleTranscriptComplete(finalTranscript);
         }
       };
 
       recognitionRef.current.onend = () => {
-        console.log('Speech recognition ended, shouldAutoRestart:', shouldAutoRestart, 'isAISpeaking:', isAISpeaking);
+        console.log('Speech recognition ended');
         setIsRecording(false);
         setCurrentTranscript('');
       };
@@ -67,8 +74,6 @@ export const useSpeechRecognition = (
         });
         setIsRecording(false);
       };
-    } else {
-      console.log('Speech recognition not supported');
     }
 
     return () => {
@@ -76,19 +81,25 @@ export const useSpeechRecognition = (
         recognitionRef.current.stop();
       }
     };
-  }, [onTranscriptComplete, toast]);
+  }, [toast, handleTranscriptComplete, isAISpeaking]);
 
   // Auto-restart recording when AI finishes speaking
   useEffect(() => {
     if (!isAISpeaking && shouldAutoRestart && recognitionRef.current) {
       console.log('Auto-restarting recording after AI finished speaking');
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         if (recognitionRef.current && !isAISpeaking) {
-          recognitionRef.current.start();
-          setIsRecording(true);
-          setShouldAutoRestart(false);
+          try {
+            recognitionRef.current.start();
+            setIsRecording(true);
+            setShouldAutoRestart(false);
+          } catch (error) {
+            console.error('Error auto-restarting recording:', error);
+          }
         }
-      }, 500); // Small delay to ensure AI has completely finished
+      }, 500);
+
+      return () => clearTimeout(timer);
     }
   }, [isAISpeaking, shouldAutoRestart]);
 
@@ -96,14 +107,14 @@ export const useSpeechRecognition = (
   useEffect(() => {
     if (isAISpeaking && isRecording && recognitionRef.current) {
       console.log('Stopping recording because AI started speaking');
-      setShouldAutoRestart(true); // Mark for auto-restart
+      setShouldAutoRestart(true);
       recognitionRef.current.stop();
       setIsRecording(false);
       setCurrentTranscript('');
     }
   }, [isAISpeaking, isRecording]);
 
-  const toggleRecording = () => {
+  const toggleRecording = useCallback(() => {
     console.log('toggleRecording called, current state:', { isRecording, isAISpeaking });
     
     if (!recognitionRef.current) {
@@ -131,11 +142,20 @@ export const useSpeechRecognition = (
       setShouldAutoRestart(false);
     } else {
       console.log('Starting recording');
-      recognitionRef.current.start();
-      setIsRecording(true);
-      setShouldAutoRestart(false);
+      try {
+        recognitionRef.current.start();
+        setIsRecording(true);
+        setShouldAutoRestart(false);
+      } catch (error) {
+        console.error('Error starting recording:', error);
+        toast({
+          title: "Recording Error",
+          description: "Failed to start recording. Please try again.",
+          variant: "destructive",
+        });
+      }
     }
-  };
+  }, [isRecording, isAISpeaking, toast]);
 
   return {
     isRecording,
