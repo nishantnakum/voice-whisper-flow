@@ -24,6 +24,9 @@ export const useElevenLabsSpeech = () => {
   };
 
   const speakText = async (text: string) => {
+    console.log('=== ELEVENLABS TTS START ===');
+    console.log('Text to speak:', text);
+    
     if (!apiKey) {
       console.error('ElevenLabs API key not provided');
       return;
@@ -31,6 +34,7 @@ export const useElevenLabsSpeech = () => {
 
     try {
       setIsPlaying(true);
+      console.log('Set isPlaying to true');
       
       // Add natural human expressions to the text
       const enhancedText = addHumanExpressions(text);
@@ -38,6 +42,7 @@ export const useElevenLabsSpeech = () => {
       console.log('Using API key:', apiKey.substring(0, 10) + '...');
       
       // Use Aria voice ID (9BWtsMINqrJLrRacOk9x) which is a reliable default
+      console.log('Making API request to ElevenLabs...');
       const response = await fetch('https://api.elevenlabs.io/v1/text-to-speech/9BWtsMINqrJLrRacOk9x', {
         method: 'POST',
         headers: {
@@ -57,6 +62,9 @@ export const useElevenLabsSpeech = () => {
         }),
       });
 
+      console.log('API response status:', response.status);
+      console.log('API response headers:', Object.fromEntries(response.headers.entries()));
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error('ElevenLabs API error:', response.status, errorText);
@@ -70,13 +78,28 @@ export const useElevenLabsSpeech = () => {
 
       console.log('ElevenLabs API response successful, creating audio...');
       const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
+      console.log('Audio blob created, size:', audioBlob.size, 'bytes');
+      console.log('Audio blob type:', audioBlob.type);
       
+      const audioUrl = URL.createObjectURL(audioBlob);
+      console.log('Audio URL created:', audioUrl);
+      
+      // Stop any existing audio
       if (audioRef.current) {
+        console.log('Stopping existing audio');
         audioRef.current.pause();
+        audioRef.current = null;
       }
       
+      // Create new audio element
+      console.log('Creating new Audio element...');
       audioRef.current = new Audio(audioUrl);
+      
+      // Set up event listeners
+      audioRef.current.onloadstart = () => console.log('Audio load started');
+      audioRef.current.oncanplay = () => console.log('Audio can play');
+      audioRef.current.onplay = () => console.log('Audio play event fired');
+      audioRef.current.onplaying = () => console.log('Audio is playing');
       audioRef.current.onended = () => {
         console.log('Audio playback ended');
         setIsPlaying(false);
@@ -84,24 +107,46 @@ export const useElevenLabsSpeech = () => {
       };
       audioRef.current.onerror = (error) => {
         console.error('Audio playback error:', error);
+        console.error('Audio error details:', audioRef.current?.error);
         setIsPlaying(false);
         URL.revokeObjectURL(audioUrl);
       };
+      audioRef.current.onpause = () => console.log('Audio paused');
+      audioRef.current.onabort = () => console.log('Audio aborted');
+      audioRef.current.onstalled = () => console.log('Audio stalled');
+      audioRef.current.onsuspend = () => console.log('Audio suspended');
+      
+      // Set volume
+      audioRef.current.volume = 1.0;
+      console.log('Audio volume set to:', audioRef.current.volume);
       
       console.log('Starting audio playback...');
-      await audioRef.current.play();
-      console.log('Audio is now playing');
+      try {
+        await audioRef.current.play();
+        console.log('Audio play() promise resolved successfully');
+      } catch (playError) {
+        console.error('Error during audio.play():', playError);
+        setIsPlaying(false);
+        throw playError;
+      }
+      
     } catch (error) {
       console.error('Error with ElevenLabs TTS:', error);
       setIsPlaying(false);
     }
+    
+    console.log('=== ELEVENLABS TTS END ===');
   };
 
   const stopSpeaking = () => {
+    console.log('stopSpeaking called');
     if (audioRef.current) {
+      console.log('Stopping audio playback');
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
       setIsPlaying(false);
+    } else {
+      console.log('No audio to stop');
     }
   };
 
