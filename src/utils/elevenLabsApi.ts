@@ -1,6 +1,4 @@
 
-import { generateSecureSpeech } from './secureApiService';
-
 export interface ElevenLabsConfig {
   voiceId: string;
   modelId: string;
@@ -23,20 +21,42 @@ export const defaultConfig: ElevenLabsConfig = {
   }
 };
 
-// Secure speech synthesis using Edge Functions
 export const synthesizeSpeech = async (
   text: string, 
   apiKey: string, 
   config: ElevenLabsConfig = defaultConfig
 ): Promise<Blob> => {
-  console.log('Using secure speech synthesis...');
+  console.log('Making API request to ElevenLabs...');
   
-  // Use secure API service instead of direct API calls
-  const audioBlob = await generateSecureSpeech(text);
-  
-  if (!audioBlob) {
-    throw new Error('Failed to synthesize speech securely');
+  const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${config.voiceId}`, {
+    method: 'POST',
+    headers: {
+      'Accept': 'audio/mpeg',
+      'Content-Type': 'application/json',
+      'xi-api-key': apiKey,
+    },
+    body: JSON.stringify({
+      text,
+      model_id: config.modelId,
+      voice_settings: config.voiceSettings
+    }),
+  });
+
+  console.log('API response status:', response.status);
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('ElevenLabs API error:', response.status, errorText);
+    
+    if (response.status === 401) {
+      console.error('Invalid API key. Please check your ElevenLabs API key.');
+    }
+    
+    throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
   }
+
+  const audioBlob = await response.blob();
+  console.log('Audio blob created, size:', audioBlob.size, 'bytes');
   
   return audioBlob;
 };
