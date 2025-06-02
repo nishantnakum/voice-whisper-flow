@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MessageCircle } from 'lucide-react';
-import { generateAIResponse, extractConfidenceScore, defaultConfig, BrainstormerConfig } from '@/utils/geminiApi';
+import { generateAIResponse, defaultConfig, BrainstormerConfig } from '@/utils/geminiApi';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { useSpeechSynthesis } from '@/hooks/useSpeechSynthesis';
 import { ControlPanel } from './ControlPanel';
@@ -9,7 +9,6 @@ import { TranscriptDisplay } from './TranscriptDisplay';
 import { ProcessingIndicator } from './ProcessingIndicator';
 import { MessageList } from './MessageList';
 import { ConfigPanel } from './ConfigPanel';
-import { ConfidenceIndicator } from './ConfidenceIndicator';
 import { Message } from './types';
 
 const VoiceChat = () => {
@@ -19,7 +18,6 @@ const VoiceChat = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [config, setConfig] = useState<BrainstormerConfig>(defaultConfig);
   const [userName, setUserName] = useState('User');
-  const [lastConfidenceScore, setLastConfidenceScore] = useState<number | null>(null);
 
   const { speakText, stopSpeaking, isPlaying } = useSpeechSynthesis();
 
@@ -50,10 +48,6 @@ const VoiceChat = () => {
       const aiResponse = await generateAIResponse(text, recentHistory, config, userName);
       console.log('AI response received:', aiResponse);
       
-      // Extract confidence score
-      const confidenceScore = extractConfidenceScore(aiResponse);
-      setLastConfidenceScore(confidenceScore);
-      
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
@@ -76,7 +70,6 @@ const VoiceChat = () => {
       };
       setMessages(prev => [...prev, errorMessage]);
       setIsProcessing(false);
-      setLastConfidenceScore(null);
     }
   }, [speakText, isPlaying, messages, config, userName]);
 
@@ -127,10 +120,6 @@ const VoiceChat = () => {
           />
 
           <ProcessingIndicator isProcessing={isProcessing} />
-
-          {config.mode === 'brainstormer' && (
-            <ConfidenceIndicator confidence={lastConfidenceScore} />
-          )}
 
           <MessageList messages={messages} />
         </CardContent>

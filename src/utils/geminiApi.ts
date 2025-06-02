@@ -28,9 +28,7 @@ You are participating in a group conversation and will identify yourself as Brai
 
 When you respond, please refer to ${userName} by name when replying back so that it is clear to everyone in the group what you are responding to.
 
-${voiceOptimized ? 'Since this is a voice conversation, structure your response to be natural for spoken delivery while maintaining depth and detail. Break complex information into digestible segments.' : ''}
-
-At the end of your response, provide a confidence score from 0-10 indicating how confident you are in your answer.`;
+${voiceOptimized ? 'Since this is a voice conversation, structure your response to be natural for spoken delivery while maintaining depth and detail. Break complex information into digestible segments.' : ''}`;
 
   return `${basePrompt}\n\n${userName} said: "${userMessage}"`;
 };
@@ -118,23 +116,4 @@ export const generateAIResponse = async (
     console.error('Error calling Gemini API:', error);
     return "I'm sorry, I'm having trouble processing your request right now. Could you please try again?";
   }
-};
-
-export const extractConfidenceScore = (response: string): number | null => {
-  // Look for confidence patterns like "Confidence: 8/10" or "Confidence Score: 7"
-  const patterns = [
-    /confidence[:\s]*(\d+)(?:\/10)?/i,
-    /confidence score[:\s]*(\d+)(?:\/10)?/i,
-    /(\d+)\/10\s*confidence/i
-  ];
-  
-  for (const pattern of patterns) {
-    const match = response.match(pattern);
-    if (match) {
-      const score = parseInt(match[1]);
-      return score >= 0 && score <= 10 ? score : null;
-    }
-  }
-  
-  return null;
 };
