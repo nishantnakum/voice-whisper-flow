@@ -7,8 +7,45 @@ interface ChatMessage {
   parts: { text: string }[];
 }
 
-export const generateAIResponse = async (userMessage: string, chatHistory: any[] = []): Promise<string> => {
-  console.log('generateAIResponse called with:', userMessage, 'History length:', chatHistory.length);
+export interface BrainstormerConfig {
+  mode: 'brainstormer' | 'quick_chat';
+  voiceOptimized: boolean;
+  maxTokens: number;
+}
+
+export const defaultConfig: BrainstormerConfig = {
+  mode: 'brainstormer',
+  voiceOptimized: true,
+  maxTokens: 1000
+};
+
+const getBrainstormerPrompt = (userMessage: string, userName: string = 'User', voiceOptimized: boolean = true) => {
+  const basePrompt = `You are Brainstormer, an AI bot developed and is the property of Noesis.tech. You are just like ChatGPT, except for every question you're asked, you think 50x the answers, and then combine them into the best worded, most comprehensive, most accurate answer, which you output.
+
+A better answer supports claims with numbers (IE: The company grossed 10 Billion) and has sources when possible (IE: Report XXXXX, 2015). Furthermore, they're more grammatically correct and use more effective, accurate language. These answers should be created by synthesizing multiple perspectives into one comprehensive response.
+
+You are participating in a group conversation and will identify yourself as Brainstormer. Your role is to be a brainstorming partner, working together to generate creative and innovative ideas. Think outside the box and suggest any weird or wacky ideas that come to mind. Keep the brainstorming session fluid and dynamic by continuously generating new ideas to explore.
+
+When you respond, please refer to ${userName} by name when replying back so that it is clear to everyone in the group what you are responding to.
+
+${voiceOptimized ? 'Since this is a voice conversation, structure your response to be natural for spoken delivery while maintaining depth and detail. Break complex information into digestible segments.' : ''}
+
+At the end of your response, provide a confidence score from 0-10 indicating how confident you are in your answer.`;
+
+  return `${basePrompt}\n\n${userName} said: "${userMessage}"`;
+};
+
+const getQuickChatPrompt = (userMessage: string) => {
+  return `You are a helpful AI assistant in a voice chat. Keep your responses conversational, concise (2-3 sentences max), and natural for spoken conversation. User said: "${userMessage}"`;
+};
+
+export const generateAIResponse = async (
+  userMessage: string, 
+  chatHistory: any[] = [], 
+  config: BrainstormerConfig = defaultConfig,
+  userName: string = 'User'
+): Promise<string> => {
+  console.log('generateAIResponse called with:', userMessage, 'Mode:', config.mode, 'History length:', chatHistory.length);
   
   try {
     console.log('Making API request to Gemini...');
@@ -31,10 +68,14 @@ export const generateAIResponse = async (userMessage: string, chatHistory: any[]
       }
     });
     
-    // Add current user message
+    // Add current user message with appropriate prompt
+    const prompt = config.mode === 'brainstormer' 
+      ? getBrainstormerPrompt(userMessage, userName, config.voiceOptimized)
+      : getQuickChatPrompt(userMessage);
+    
     contents.push({
       role: 'user',
-      parts: [{ text: `You are a helpful AI assistant in a voice chat. Keep your responses conversational, concise (2-3 sentences max), and natural for spoken conversation. User said: "${userMessage}"` }]
+      parts: [{ text: prompt }]
     });
 
     console.log('Sending contents to API:', contents);
@@ -47,10 +88,10 @@ export const generateAIResponse = async (userMessage: string, chatHistory: any[]
       body: JSON.stringify({
         contents: contents,
         generationConfig: {
-          temperature: 0.7,
-          topP: 0.8,
-          topK: 40,
-          maxOutputTokens: 200,
+          temperature: config.mode === 'brainstormer' ? 0.8 : 0.7,
+          topP: config.mode === 'brainstormer' ? 0.9 : 0.8,
+          topK: config.mode === 'brainstormer' ? 50 : 40,
+          maxOutputTokens: config.maxTokens,
         }
       }),
     });
@@ -77,4 +118,23 @@ export const generateAIResponse = async (userMessage: string, chatHistory: any[]
     console.error('Error calling Gemini API:', error);
     return "I'm sorry, I'm having trouble processing your request right now. Could you please try again?";
   }
+};
+
+export const extractConfidenceScore = (response: string): number | null => {
+  // Look for confidence patterns like "Confidence: 8/10" or "Confidence Score: 7"
+  const patterns = [
+    /confidence[:\s]*(\d+)(?:\/10)?/i,
+    /confidence score[:\s]*(\d+)(?:\/10)?/i,
+    /(\d+)\/10\s*confidence/i
+  ];
+  
+  for (const pattern of patterns) {
+    const match = response.match(pattern);
+    if (match) {
+      const score = parseInt(match[1]);
+      return score >= 0 && score <= 10 ? score : null;
+    }
+  }
+  
+  return null;
 };

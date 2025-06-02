@@ -1,13 +1,15 @@
 import React, { useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MessageCircle } from 'lucide-react';
-import { generateAIResponse } from '@/utils/geminiApi';
+import { generateAIResponse, extractConfidenceScore, defaultConfig, BrainstormerConfig } from '@/utils/geminiApi';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { useSpeechSynthesis } from '@/hooks/useSpeechSynthesis';
 import { ControlPanel } from './ControlPanel';
 import { TranscriptDisplay } from './TranscriptDisplay';
 import { ProcessingIndicator } from './ProcessingIndicator';
 import { MessageList } from './MessageList';
+import { ConfigPanel } from './ConfigPanel';
+import { ConfidenceIndicator } from './ConfidenceIndicator';
 import { Message } from './types';
 
 const VoiceChat = () => {
@@ -15,6 +17,9 @@ const VoiceChat = () => {
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [config, setConfig] = useState<BrainstormerConfig>(defaultConfig);
+  const [userName, setUserName] = useState('User');
+  const [lastConfidenceScore, setLastConfidenceScore] = useState<number | null>(null);
 
   const { speakText, stopSpeaking, isPlaying } = useSpeechSynthesis();
 
@@ -39,11 +44,15 @@ const VoiceChat = () => {
     setIsProcessing(true);
 
     try {
-      console.log('Calling generateAIResponse with history...');
+      console.log('Calling generateAIResponse with Brainstormer config...');
       // Pass recent chat history (last 10 messages to keep context manageable)
       const recentHistory = updatedMessages.slice(-10);
-      const aiResponse = await generateAIResponse(text, recentHistory);
+      const aiResponse = await generateAIResponse(text, recentHistory, config, userName);
       console.log('AI response received:', aiResponse);
+      
+      // Extract confidence score
+      const confidenceScore = extractConfidenceScore(aiResponse);
+      setLastConfidenceScore(confidenceScore);
       
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -67,8 +76,9 @@ const VoiceChat = () => {
       };
       setMessages(prev => [...prev, errorMessage]);
       setIsProcessing(false);
+      setLastConfidenceScore(null);
     }
-  }, [speakText, isPlaying, messages]);
+  }, [speakText, isPlaying, messages, config, userName]);
 
   const { isRecording, currentTranscript, toggleRecording } = useSpeechRecognition(
     handleUserMessage, 
@@ -80,7 +90,8 @@ const VoiceChat = () => {
     isProcessing, 
     isRecording, 
     isPlaying,
-    currentTranscript 
+    currentTranscript,
+    mode: config.mode
   });
 
   return (
@@ -89,13 +100,20 @@ const VoiceChat = () => {
         <CardHeader className="text-center">
           <CardTitle className="flex items-center justify-center gap-2">
             <MessageCircle className="h-6 w-6" />
-            Voice Chat with AI
+            {config.mode === 'brainstormer' ? 'Brainstormer AI by Noesis.tech' : 'Voice Chat with AI'}
             <span className="text-sm font-normal text-blue-600 ml-2">
-              (Browser Speech)
+              ({config.mode === 'brainstormer' ? 'Enhanced Mode' : 'Quick Chat'})
             </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
+          <ConfigPanel
+            config={config}
+            onConfigChange={setConfig}
+            userName={userName}
+            onUserNameChange={setUserName}
+          />
+
           <ControlPanel
             isRecording={isRecording}
             isPlaying={isPlaying}
@@ -109,6 +127,10 @@ const VoiceChat = () => {
           />
 
           <ProcessingIndicator isProcessing={isProcessing} />
+
+          {config.mode === 'brainstormer' && (
+            <ConfidenceIndicator confidence={lastConfidenceScore} />
+          )}
 
           <MessageList messages={messages} />
         </CardContent>
