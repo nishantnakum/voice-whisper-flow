@@ -1,15 +1,13 @@
-
 import React, { useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MessageCircle } from 'lucide-react';
 import { generateAIResponse } from '@/utils/geminiApi';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
-import { useElevenLabsSpeech } from '@/hooks/useElevenLabsSpeech';
+import { useSpeechSynthesis } from '@/hooks/useSpeechSynthesis';
 import { ControlPanel } from './ControlPanel';
 import { TranscriptDisplay } from './TranscriptDisplay';
 import { ProcessingIndicator } from './ProcessingIndicator';
 import { MessageList } from './MessageList';
-import { ApiKeyInput } from './ApiKeyInput';
 import { Message } from './types';
 
 const VoiceChat = () => {
@@ -18,7 +16,7 @@ const VoiceChat = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const { speakText, stopSpeaking, isPlaying, setApiKey, apiKey } = useElevenLabsSpeech();
+  const { speakText, stopSpeaking, isPlaying } = useSpeechSynthesis();
 
   const handleUserMessage = useCallback(async (text: string) => {
     console.log('handleUserMessage called with:', text, 'isPlaying:', isPlaying);
@@ -57,7 +55,7 @@ const VoiceChat = () => {
       setMessages(prev => [...prev, aiMessage]);
       setIsProcessing(false);
       
-      console.log('Speaking AI response with ElevenLabs...');
+      console.log('Speaking AI response with browser speech synthesis...');
       speakText(aiResponse);
     } catch (error) {
       console.error('Error generating AI response:', error);
@@ -85,15 +83,6 @@ const VoiceChat = () => {
     currentTranscript 
   });
 
-  // Show API key input if not set
-  if (!apiKey) {
-    return (
-      <div className="max-w-4xl mx-auto p-6">
-        <ApiKeyInput onApiKeySet={setApiKey} />
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       <Card>
@@ -101,8 +90,8 @@ const VoiceChat = () => {
           <CardTitle className="flex items-center justify-center gap-2">
             <MessageCircle className="h-6 w-6" />
             Voice Chat with AI
-            <span className="text-sm font-normal text-green-600 ml-2">
-              (ElevenLabs Enhanced)
+            <span className="text-sm font-normal text-blue-600 ml-2">
+              (Browser Speech)
             </span>
           </CardTitle>
         </CardHeader>
