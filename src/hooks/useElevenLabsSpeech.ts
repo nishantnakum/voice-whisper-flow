@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 
 export const useElevenLabsSpeech = () => {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [apiKey, setApiKey] = useState('ap2_44f2896a-adec-4b81-8154-f075b91214fe');
+  const [apiKey, setApiKey] = useState('sk_4e46ade5c4bf6e82057b27817af4a7a2b9200860c3c92e85');
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Load API key from localStorage on mount, but default to provided key
@@ -12,8 +12,8 @@ export const useElevenLabsSpeech = () => {
     if (savedApiKey) {
       setApiKey(savedApiKey);
     } else {
-      // Set the provided API key as default and save it
-      localStorage.setItem('elevenlabs-api-key', 'ap2_44f2896a-adec-4b81-8154-f075b91214fe');
+      // Set the new provided API key as default and save it
+      localStorage.setItem('elevenlabs-api-key', 'sk_4e46ade5c4bf6e82057b27817af4a7a2b9200860c3c92e85');
     }
   }, []);
 
@@ -71,6 +71,7 @@ export const useElevenLabsSpeech = () => {
         
         if (response.status === 401) {
           console.error('Invalid API key. Please check your ElevenLabs API key.');
+          console.error('Current API key being used:', apiKey);
         }
         
         throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
