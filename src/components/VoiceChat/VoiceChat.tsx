@@ -1,7 +1,8 @@
 import React, { useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MessageCircle } from 'lucide-react';
-import { generateAIResponse, defaultConfig, BrainstormerConfig } from '@/utils/geminiApi';
+import { MessageCircle, Shield } from 'lucide-react';
+import { defaultConfig, BrainstormerConfig } from '@/utils/geminiApi';
+import { generateSecureAIResponse, validateUserName, validateMessage } from '@/utils/secureApiService';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { useSpeechSynthesis } from '@/hooks/useSpeechSynthesis';
 import { ControlPanel } from './ControlPanel';
@@ -9,7 +10,9 @@ import { TranscriptDisplay } from './TranscriptDisplay';
 import { ProcessingIndicator } from './ProcessingIndicator';
 import { MessageList } from './MessageList';
 import { ConfigPanel } from './ConfigPanel';
+import { SecurityStatus } from './SecurityStatus';
 import { Message } from './types';
+import { useToast } from '@/hooks/use-toast';
 
 const VoiceChat = () => {
   console.log('VoiceChat component rendering...');
@@ -18,6 +21,7 @@ const VoiceChat = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [config, setConfig] = useState<BrainstormerConfig>(defaultConfig);
   const [userName, setUserName] = useState('User');
+  const { toast } = useToast();
 
   const { speakText, stopSpeaking, isPlaying } = useSpeechSynthesis();
 
@@ -26,6 +30,16 @@ const VoiceChat = () => {
     
     if (isPlaying) {
       console.log('Skipping message processing because AI is speaking');
+      return;
+    }
+
+    // Validate input
+    if (!validateMessage(text)) {
+      toast({
+        title: "Invalid Message",
+        description: "Please enter a valid message (1-2000 characters, no harmful content).",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -42,10 +56,10 @@ const VoiceChat = () => {
     setIsProcessing(true);
 
     try {
-      console.log('Calling generateAIResponse with Brainstormer config...');
+      console.log('Calling secure AI response...');
       // Pass recent chat history (last 10 messages to keep context manageable)
       const recentHistory = updatedMessages.slice(-10);
-      const aiResponse = await generateAIResponse(text, recentHistory, config, userName);
+      const aiResponse = await generateSecureAIResponse(text, recentHistory, config, userName);
       console.log('AI response received:', aiResponse);
       
       const aiMessage: Message = {
@@ -70,8 +84,26 @@ const VoiceChat = () => {
       };
       setMessages(prev => [...prev, errorMessage]);
       setIsProcessing(false);
+      
+      toast({
+        title: "Error",
+        description: "Failed to process your message. Please try again.",
+        variant: "destructive",
+      });
     }
-  }, [speakText, isPlaying, messages, config, userName]);
+  }, [speakText, isPlaying, messages, config, userName, toast]);
+
+  const handleUserNameChange = (newName: string) => {
+    if (validateUserName(newName)) {
+      setUserName(newName);
+    } else {
+      toast({
+        title: "Invalid Name",
+        description: "Name must be 1-50 characters and contain only letters, numbers, spaces, hyphens, and underscores.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const { isRecording, currentTranscript, toggleRecording } = useSpeechRecognition(
     handleUserMessage, 
@@ -97,14 +129,17 @@ const VoiceChat = () => {
             <span className="text-sm font-normal text-blue-600 ml-2">
               ({config.mode === 'brainstormer' ? 'Enhanced Mode' : 'Quick Chat'})
             </span>
+            <Shield className="h-4 w-4 text-green-600 ml-2" title="Secure Mode" />
           </CardTitle>
         </CardHeader>
         <CardContent>
+          <SecurityStatus />
+
           <ConfigPanel
             config={config}
             onConfigChange={setConfig}
             userName={userName}
-            onUserNameChange={setUserName}
+            onUserNameChange={handleUserNameChange}
           />
 
           <ControlPanel
