@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MessageCircle, Shield } from 'lucide-react';
@@ -129,7 +130,7 @@ const VoiceChat = () => {
             <span className="text-sm font-normal text-blue-600 ml-2">
               ({config.mode === 'brainstormer' ? 'Enhanced Mode' : 'Quick Chat'})
             </span>
-            <Shield className="h-4 w-4 text-green-600 ml-2" title="Secure Mode" />
+            <Shield className="h-4 w-4 text-green-600 ml-2" />
           </CardTitle>
         </CardHeader>
         <CardContent>

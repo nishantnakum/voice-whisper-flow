@@ -9,4 +9,17 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Supabase configuration missing. Backend features will be unavailable.');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Create a mock client when Supabase is not configured
+const createMockClient = () => ({
+  functions: {
+    invoke: async () => ({ 
+      data: { response: "Demo mode: Please connect to Supabase for full functionality." }, 
+      error: null 
+    })
+  }
+});
+
+// Only create real Supabase client if we have valid configuration
+export const supabase = (supabaseUrl && supabaseAnonKey) 
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : createMockClient() as any;
