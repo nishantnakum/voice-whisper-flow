@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { MessageAttachment } from '@/types/ai';
 
@@ -88,6 +87,7 @@ export const useVisionCapabilities = () => {
       id: Date.now().toString(),
       type: file.type.startsWith('image/') ? 'image' : 'document',
       name: file.name,
+      size: file.size,
       url: URL.createObjectURL(file),
       metadata: {
         size: file.size,
@@ -162,13 +162,10 @@ const analyzeImageWithGemini = async (base64Image: string): Promise<string> => {
 
 const extractPDFContent = async (file: File): Promise<string> => {
   try {
-    // For production, we'd use pdf-parse or similar library
-    // For now, using FileReader to extract what we can
     const arrayBuffer = await file.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
     const text = new TextDecoder('utf-8').decode(uint8Array);
     
-    // Extract readable text between common PDF markers
     const textContent = text.match(/BT\s+(.*?)\s+ET/g)?.join(' ') || '';
     const cleanText = textContent.replace(/[^\w\s\.,;:!?-]/g, ' ').replace(/\s+/g, ' ').trim();
     
@@ -189,7 +186,6 @@ Recommended Actions: Review extracted content for strategic insights and decisio
 
 const extractWordContent = async (file: File): Promise<string> => {
   try {
-    // Basic extraction for .docx files (which are ZIP archives)
     if (file.type.includes('officedocument')) {
       return `Word document "${file.name}" uploaded successfully. Size: ${(file.size / 1024).toFixed(1)}KB. Advanced document parsing available for content extraction, formatting analysis, and strategic insights.`;
     } else {

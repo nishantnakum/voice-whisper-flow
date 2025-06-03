@@ -1,4 +1,3 @@
-
 import { useState, useRef, useCallback, useEffect } from 'react';
 
 export interface SpeechConfig {
@@ -172,7 +171,6 @@ export const useAdvancedSpeechRecognition = (
     try {
       // Basic voice print analysis using audio characteristics
       const fundamentalFreq = await estimateFundamentalFreq(audioData);
-      const spectralCentroid = calculateSpectralCentroid(audioData);
       
       // Simple speaker classification based on voice characteristics
       if (fundamentalFreq < 150) return 'speaker_low';
@@ -209,20 +207,6 @@ export const useAdvancedSpeechRecognition = (
     return sampleRate / bestLag;
   };
 
-  const calculateSpectralCentroid = (audioData: Float32Array): number => {
-    // Simplified spectral centroid calculation
-    let numerator = 0;
-    let denominator = 0;
-    
-    for (let i = 0; i < audioData.length; i++) {
-      const magnitude = Math.abs(audioData[i]);
-      numerator += i * magnitude;
-      denominator += magnitude;
-    }
-    
-    return denominator > 0 ? numerator / denominator : 0;
-  };
-
   const startRecording = useCallback(async () => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       console.error('Speech recognition not supported');
@@ -244,7 +228,7 @@ export const useAdvancedSpeechRecognition = (
         setIsRecording(true);
       });
 
-      recognitionRef.current.addEventListener('result', async (event) => {
+      recognitionRef.current.addEventListener('result', async (event: SpeechRecognitionEvent) => {
         setIsProcessing(true);
         
         for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -253,17 +237,14 @@ export const useAdvancedSpeechRecognition = (
           const confidence = result[0].confidence;
 
           if (result.isFinal && confidence >= config.confidenceThreshold) {
-            // Detect language
             const detectedLang = await detectLanguage(transcript);
             setDetectedLanguage(detectedLang);
 
-            // Translate if needed
             const translatedText = config.enableTranslation && config.targetLanguage
               ? await translateText(transcript, config.targetLanguage)
               : undefined;
 
-            // Create audio data for speaker identification
-            const audioData = new Float32Array(1024); // Simplified for demo
+            const audioData = new Float32Array(1024);
             const speakerId = await identifySpeaker(audioData);
 
             const speechResult: SpeechResult = {
@@ -287,7 +268,7 @@ export const useAdvancedSpeechRecognition = (
         setIsProcessing(false);
       });
 
-      recognitionRef.current.addEventListener('error', (event) => {
+      recognitionRef.current.addEventListener('error', (event: SpeechRecognitionErrorEvent) => {
         console.error('Speech recognition error:', event.error);
         setIsRecording(false);
         setIsProcessing(false);
