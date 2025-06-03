@@ -153,13 +153,21 @@ export const useUserPreferences = (userId: string = 'default') => {
 
     savePreferences(updatedPreferences);
     
-    // Update analytics
+    // Update analytics with proper type checking
+    let preferredLength: 'short' | 'medium' | 'long';
+    if (context.responseLength < 300) {
+      preferredLength = 'short';
+    } else if (context.responseLength > 700) {
+      preferredLength = 'long';
+    } else {
+      preferredLength = 'medium';
+    }
+
     const updatedAnalytics = {
       ...analytics,
       responsePreferences: {
         ...analytics.responsePreferences,
-        preferredLength: context.responseLength < 300 ? 'short' : 
-                        context.responseLength > 700 ? 'long' : 'medium'
+        preferredLength
       }
     };
     

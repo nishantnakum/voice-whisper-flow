@@ -1,4 +1,3 @@
-
 import { AIMode, Message, MessageAttachment } from '@/types/ai';
 import { getAIModeById } from '@/config/aiModes';
 import { performWebSearch, citeSources, synthesizeSearchResults } from './webSearchService';
@@ -275,7 +274,6 @@ export const startScreenShare = async (): Promise<MediaStream | null> => {
 
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: {
-        mediaSource: 'screen',
         width: { ideal: 1920, max: 1920 },
         height: { ideal: 1080, max: 1080 }
       },
