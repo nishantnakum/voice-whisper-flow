@@ -6,6 +6,8 @@ import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { useSpeechSynthesis } from '@/hooks/useSpeechSynthesis';
 import { useVisionCapabilities } from '@/hooks/useVisionCapabilities';
 import { useConversationMemory } from '@/hooks/useConversationMemory';
+import { useProjectKnowledge } from '@/hooks/useProjectKnowledge';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { generateEnhancedAIResponse } from '@/services/enhancedAIService';
 import { AI_MODES } from '@/config/aiModes';
 import { Message, MessageAttachment } from '@/types/ai';
@@ -16,6 +18,7 @@ import { EnhancedMessageList } from './EnhancedMessageList';
 import { EnhancedConfigPanel } from './EnhancedConfigPanel';
 import { FileUploadArea } from './FileUploadArea';
 import { ConversationHistory } from './ConversationHistory';
+import { ScreenSharePanel } from './ScreenSharePanel';
 
 const EnhancedVoiceChat = () => {
   console.log('EnhancedVoiceChat component rendering...');
@@ -27,6 +30,8 @@ const EnhancedVoiceChat = () => {
 
   const { speakText, stopSpeaking, isPlaying } = useSpeechSynthesis();
   const { analyzeImage, analyzeDocument, createAttachment, isProcessing: isAnalyzing } = useVisionCapabilities();
+  const { getContextualKnowledge, addKnowledge } = useProjectKnowledge();
+  const userPreferences = useUserPreferences();
   
   const {
     conversations,
@@ -43,6 +48,16 @@ const EnhancedVoiceChat = () => {
       createNewConversation('New Brainstorming Session', 'default');
     }
   }, [currentConversation, createNewConversation]);
+
+  // Track user interactions for learning
+  useEffect(() => {
+    if (currentConversation?.messages.length) {
+      const lastMessage = currentConversation.messages[currentConversation.messages.length - 1];
+      if (lastMessage.type === 'user') {
+        userPreferences.trackInteraction(currentMode, lastMessage.text);
+      }
+    }
+  }, [currentConversation?.messages, currentMode, userPreferences]);
 
   const getCurrentMessages = (): Message[] => {
     return currentConversation?.messages || [];
@@ -72,18 +87,34 @@ const EnhancedVoiceChat = () => {
 
     console.log('Adding user message:', userMessage);
     addMessageToConversation(currentConversation.id, userMessage);
-    setPendingAttachments([]); // Clear pending attachments
+    setPendingAttachments([]);
     setIsProcessing(true);
+
+    // Add to knowledge base if significant
+    if (text.length > 50) {
+      await addKnowledge(
+        `User Input - ${new Date().toLocaleDateString()}`,
+        text,
+        'note',
+        { mode: currentMode, timestamp: new Date() }
+      );
+    }
 
     try {
       console.log('Calling enhanced AI service...');
+      
+      // Get relevant knowledge for context
+      const relevantKnowledge = getContextualKnowledge(text, 3);
+      
       const aiResponse = await generateEnhancedAIResponse({
         message: text,
         mode: currentMode,
         chatHistory: getCurrentMessages(),
         attachments: userMessage.attachments,
         userName,
-        context: currentConversation.context
+        context: currentConversation.context,
+        knowledgeBase: relevantKnowledge,
+        userPreferences
       });
       
       console.log('Enhanced AI response received:', aiResponse);
@@ -99,6 +130,14 @@ const EnhancedVoiceChat = () => {
       addMessageToConversation(currentConversation.id, aiMessage);
       setIsProcessing(false);
       
+      // Add AI response to knowledge base
+      await addKnowledge(
+        `AI Response - ${AI_MODES.find(m => m.id === currentMode)?.name}`,
+        aiResponse,
+        'research',
+        { mode: currentMode, timestamp: new Date(), userQuery: text }
+      );
+      
       console.log('Speaking AI response...');
       speakText(aiResponse);
     } catch (error) {
@@ -106,14 +145,14 @@ const EnhancedVoiceChat = () => {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
-        text: "I'm sorry, I encountered an error processing your request. Please try again.",
+        text: "I apologize, but I encountered an error processing your request. Please try again or try a different approach.",
         timestamp: new Date(),
         mode: currentMode,
       };
       addMessageToConversation(currentConversation.id, errorMessage);
       setIsProcessing(false);
     }
-  }, [speakText, isPlaying, currentMode, userName, currentConversation, pendingAttachments, addMessageToConversation, getCurrentMessages]);
+  }, [speakText, isPlaying, currentMode, userName, currentConversation, pendingAttachments, addMessageToConversation, getCurrentMessages, getContextualKnowledge, addKnowledge, userPreferences]);
 
   const { isRecording, currentTranscript, toggleRecording } = useSpeechRecognition(
     handleUserMessage, 
@@ -133,15 +172,35 @@ const EnhancedVoiceChat = () => {
           analysisResult = await analyzeDocument(file);
         }
         
+        // Add to knowledge base
+        await addKnowledge(
+          file.name,
+          analysisResult,
+          file.type.startsWith('image/') ? 'image' : 'document',
+          { originalFile: file.name, uploadDate: new Date() }
+        );
+        
         const attachment = createAttachment(file, analysisResult);
         newAttachments.push(attachment);
       } catch (error) {
         console.error('Error processing file:', error);
-        // Continue with other files
       }
     }
     
     setPendingAttachments(prev => [...prev, ...newAttachments]);
+  };
+
+  const handleScreenAnalysis = async (analysis: string) => {
+    // Add screen analysis as a user message
+    await handleUserMessage(`Screen Analysis: ${analysis}`);
+    
+    // Add to knowledge base
+    await addKnowledge(
+      `Screen Capture - ${new Date().toLocaleTimeString()}`,
+      analysis,
+      'image',
+      { source: 'screen-share', timestamp: new Date() }
+    );
   };
 
   const handleNewConversation = () => {
@@ -163,7 +222,7 @@ const EnhancedVoiceChat = () => {
   });
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
+    <div className="max-w-7xl mx-auto p-6 space-y-6">
       <Card>
         <CardHeader className="text-center">
           <CardTitle className="flex items-center justify-center gap-2">
@@ -175,8 +234,8 @@ const EnhancedVoiceChat = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <div className="lg:col-span-3 space-y-4">
               <EnhancedConfigPanel
                 currentMode={currentMode}
                 onModeChange={setCurrentMode}
@@ -185,12 +244,16 @@ const EnhancedVoiceChat = () => {
                 onNewConversation={handleNewConversation}
               />
 
-              <FileUploadArea 
-                onFileUpload={handleFileUpload}
-                pendingAttachments={pendingAttachments}
-                onRemoveAttachment={(id) => setPendingAttachments(prev => prev.filter(a => a.id !== id))}
-                isProcessing={isAnalyzing}
-              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FileUploadArea 
+                  onFileUpload={handleFileUpload}
+                  pendingAttachments={pendingAttachments}
+                  onRemoveAttachment={(id) => setPendingAttachments(prev => prev.filter(a => a.id !== id))}
+                  isProcessing={isAnalyzing}
+                />
+                
+                <ScreenSharePanel onScreenAnalysis={handleScreenAnalysis} />
+              </div>
 
               <ControlPanel
                 isRecording={isRecording}
