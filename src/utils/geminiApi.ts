@@ -1,7 +1,8 @@
 
-const GEMINI_API_KEY = 'AIzaSyDJ21se4_1SdYPv3Wz72B8Ke1YQ_tFuGwc';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+import { secureLogger } from './secureLogger';
+import { inputValidator } from './inputValidator';
 
+// Remove hardcoded API key - must be provided by user
 interface ChatMessage {
   role: 'user' | 'model';
   parts: { text: string }[];
@@ -11,6 +12,7 @@ export interface BrainstormerConfig {
   mode: 'brainstormer' | 'quick_chat';
   voiceOptimized: boolean;
   maxTokens: number;
+  apiKey?: string;
 }
 
 export const defaultConfig: BrainstormerConfig = {
@@ -43,10 +45,39 @@ export const generateAIResponse = async (
   config: BrainstormerConfig = defaultConfig,
   userName: string = 'User'
 ): Promise<string> => {
-  console.log('generateAIResponse called with:', userMessage, 'Mode:', config.mode, 'History length:', chatHistory.length);
+  // Check if API key is provided
+  if (!config.apiKey) {
+    secureLogger.error('No Gemini API key provided');
+    throw new Error('Gemini API key is required. Please provide your API key to use AI features.');
+  }
+
+  // Rate limiting check
+  if (!inputValidator.checkRateLimit()) {
+    secureLogger.warn('Rate limit exceeded for AI requests');
+    throw new Error('Rate limit exceeded. Please wait before making another request.');
+  }
+
+  // Input validation
+  const messageValidation = inputValidator.validateTextInput(userMessage);
+  if (!messageValidation.isValid) {
+    secureLogger.warn('Invalid user message input', { errors: messageValidation.errors });
+    throw new Error(`Invalid input: ${messageValidation.errors.join(', ')}`);
+  }
+
+  const apiKeyValidation = inputValidator.validateApiKey(config.apiKey);
+  if (!apiKeyValidation.isValid) {
+    secureLogger.warn('Invalid Gemini API key provided');
+    throw new Error('Invalid Gemini API key provided');
+  }
+
+  secureLogger.info('Generating AI response', { 
+    mode: config.mode, 
+    historyLength: chatHistory.length,
+    messageLength: messageValidation.sanitizedInput.length
+  });
   
   try {
-    console.log('Making API request to Gemini...');
+    const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
     
     // Convert chat history to Gemini format
     const contents: ChatMessage[] = [];
@@ -68,17 +99,17 @@ export const generateAIResponse = async (
     
     // Add current user message with appropriate prompt
     const prompt = config.mode === 'brainstormer' 
-      ? getBrainstormerPrompt(userMessage, userName, config.voiceOptimized)
-      : getQuickChatPrompt(userMessage);
+      ? getBrainstormerPrompt(messageValidation.sanitizedInput, userName, config.voiceOptimized)
+      : getQuickChatPrompt(messageValidation.sanitizedInput);
     
     contents.push({
       role: 'user',
       parts: [{ text: prompt }]
     });
 
-    console.log('Sending contents to API:', contents);
+    secureLogger.debug('Sending request to Gemini API');
 
-    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+    const response = await fetch(`${GEMINI_API_URL}?key=${apiKeyValidation.sanitizedInput}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -94,26 +125,25 @@ export const generateAIResponse = async (
       }),
     });
 
-    console.log('API response status:', response.status);
+    secureLogger.info('Gemini API response received', { status: response.status });
 
     if (!response.ok) {
-      console.error('API request failed:', response.status, response.statusText);
+      secureLogger.error('Gemini API request failed', { status: response.status });
       throw new Error(`API request failed: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log('API response data:', data);
     
     if (data.candidates && data.candidates[0] && data.candidates[0].content) {
       const aiResponse = data.candidates[0].content.parts[0].text;
-      console.log('Extracted AI response:', aiResponse);
+      secureLogger.info('AI response generated successfully');
       return aiResponse;
     } else {
-      console.error('Invalid response format from Gemini API:', data);
+      secureLogger.error('Invalid response format from Gemini API');
       throw new Error('Invalid response format from Gemini API');
     }
   } catch (error) {
-    console.error('Error calling Gemini API:', error);
+    secureLogger.error('Error calling Gemini API', { error: error.message });
     return "I'm sorry, I'm having trouble processing your request right now. Could you please try again?";
   }
 };

@@ -1,10 +1,10 @@
 import { AIMode, Message, MessageAttachment } from '@/types/ai';
 import { getAIModeById } from '@/config/aiModes';
 import { performWebSearch, citeSources, synthesizeSearchResults } from './webSearchService';
+import { secureLogger } from '@/utils/secureLogger';
+import { inputValidator } from '@/utils/inputValidator';
 
-const GEMINI_API_KEY = 'AIzaSyDJ21se4_1SdYPv3Wz72B8Ke1YQ_tFuGwc';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
-
+// Remove hardcoded API key
 interface EnhancedAIRequest {
   message: string;
   mode: string;
@@ -14,12 +14,43 @@ interface EnhancedAIRequest {
   context?: Record<string, any>;
   knowledgeBase?: any[];
   userPreferences?: any;
+  apiKey?: string;
 }
 
 export const generateEnhancedAIResponse = async (request: EnhancedAIRequest): Promise<string> => {
-  const { message, mode, chatHistory, attachments, userName, context, knowledgeBase, userPreferences } = request;
+  const { message, mode, chatHistory, attachments, userName, context, knowledgeBase, userPreferences, apiKey } = request;
   
-  console.log('Enhanced AI request:', { mode, hasAttachments: !!attachments?.length, hasKnowledge: !!knowledgeBase?.length });
+  // Check if API key is provided
+  if (!apiKey) {
+    secureLogger.error('No Gemini API key provided for enhanced AI');
+    throw new Error('Gemini API key is required. Please provide your API key to use AI features.');
+  }
+
+  // Rate limiting check
+  if (!inputValidator.checkRateLimit()) {
+    secureLogger.warn('Rate limit exceeded for enhanced AI requests');
+    throw new Error('Rate limit exceeded. Please wait before making another request.');
+  }
+
+  // Input validation
+  const messageValidation = inputValidator.validateTextInput(message);
+  if (!messageValidation.isValid) {
+    secureLogger.warn('Invalid message input for enhanced AI', { errors: messageValidation.errors });
+    throw new Error(`Invalid input: ${messageValidation.errors.join(', ')}`);
+  }
+
+  const apiKeyValidation = inputValidator.validateApiKey(apiKey);
+  if (!apiKeyValidation.isValid) {
+    secureLogger.warn('Invalid API key for enhanced AI');
+    throw new Error('Invalid API key provided');
+  }
+
+  secureLogger.info('Enhanced AI request initiated', { 
+    mode, 
+    hasAttachments: !!attachments?.length, 
+    hasKnowledge: !!knowledgeBase?.length,
+    messageLength: messageValidation.sanitizedInput.length
+  });
   
   const aiMode = getAIModeById(mode);
   if (!aiMode) {
@@ -27,11 +58,13 @@ export const generateEnhancedAIResponse = async (request: EnhancedAIRequest): Pr
   }
 
   try {
-    let enhancedPrompt = await buildEnhancedPrompt(aiMode, message, userName, attachments, context, knowledgeBase, userPreferences);
+    const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+    
+    let enhancedPrompt = await buildEnhancedPrompt(aiMode, messageValidation.sanitizedInput, userName, attachments, context, knowledgeBase, userPreferences);
     
     // For Research Assistant mode, integrate web search
     if (mode === 'research_assistant') {
-      const searchResults = await performWebSearch(message);
+      const searchResults = await performWebSearch(messageValidation.sanitizedInput);
       const synthesizedInfo = synthesizeSearchResults(searchResults);
       const citations = citeSources(searchResults);
       
@@ -40,7 +73,7 @@ export const generateEnhancedAIResponse = async (request: EnhancedAIRequest): Pr
 
     const contents = buildConversationContents(chatHistory, enhancedPrompt);
 
-    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+    const response = await fetch(`${GEMINI_API_URL}?key=${apiKeyValidation.sanitizedInput}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -57,6 +90,7 @@ export const generateEnhancedAIResponse = async (request: EnhancedAIRequest): Pr
     });
 
     if (!response.ok) {
+      secureLogger.error('Enhanced AI API request failed', { status: response.status });
       throw new Error(`Enhanced AI API request failed: ${response.status}`);
     }
 
@@ -66,10 +100,10 @@ export const generateEnhancedAIResponse = async (request: EnhancedAIRequest): Pr
     // Apply post-processing based on mode and preferences
     aiResponse = postProcessResponse(aiResponse, mode, userPreferences);
     
-    console.log('Enhanced AI response generated');
+    secureLogger.info('Enhanced AI response generated successfully');
     return aiResponse;
   } catch (error) {
-    console.error('Error in enhanced AI service:', error);
+    secureLogger.error('Error in enhanced AI service', { error: error.message });
     throw error;
   }
 };
@@ -280,10 +314,10 @@ export const startScreenShare = async (): Promise<MediaStream | null> => {
       audio: false
     });
 
-    console.log('Screen sharing started successfully');
+    secureLogger.info('Screen sharing started successfully');
     return stream;
   } catch (error) {
-    console.error('Error starting screen share:', error);
+    secureLogger.error('Error starting screen share', { error: error.message });
     return null;
   }
 };
@@ -292,5 +326,5 @@ export const stopScreenShare = (stream: MediaStream) => {
   stream.getTracks().forEach(track => {
     track.stop();
   });
-  console.log('Screen sharing stopped');
+  secureLogger.info('Screen sharing stopped');
 };

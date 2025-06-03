@@ -1,4 +1,7 @@
 
+import { secureLogger } from './secureLogger';
+import { inputValidator } from './inputValidator';
+
 export interface ElevenLabsConfig {
   voiceId: string;
   modelId: string;
@@ -26,45 +29,65 @@ export const synthesizeSpeech = async (
   apiKey: string, 
   config: ElevenLabsConfig = defaultConfig
 ): Promise<Blob> => {
-  console.log('Making API request to ElevenLabs...');
-  console.log('Using voice:', config.voiceId, 'model:', config.modelId);
+  // Rate limiting check
+  if (!inputValidator.checkRateLimit()) {
+    secureLogger.warn('Rate limit exceeded for TTS requests');
+    throw new Error('Rate limit exceeded. Please wait before making another request.');
+  }
+
+  // Input validation
+  const textValidation = inputValidator.validateTextInput(text);
+  if (!textValidation.isValid) {
+    secureLogger.warn('Invalid text input for TTS', { errors: textValidation.errors });
+    throw new Error(`Invalid input: ${textValidation.errors.join(', ')}`);
+  }
+
+  const apiKeyValidation = inputValidator.validateApiKey(apiKey);
+  if (!apiKeyValidation.isValid) {
+    secureLogger.warn('Invalid API key provided');
+    throw new Error('Invalid API key provided');
+  }
+
+  secureLogger.info('Making TTS API request', { 
+    textLength: textValidation.sanitizedInput.length,
+    voiceId: config.voiceId,
+    modelId: config.modelId
+  });
   
   const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${config.voiceId}`, {
     method: 'POST',
     headers: {
       'Accept': 'audio/mpeg',
       'Content-Type': 'application/json',
-      'xi-api-key': apiKey,
+      'xi-api-key': apiKeyValidation.sanitizedInput,
     },
     body: JSON.stringify({
-      text,
+      text: textValidation.sanitizedInput,
       model_id: config.modelId,
       voice_settings: config.voiceSettings,
       output_format: 'mp3_44100_128'
     }),
   });
 
-  console.log('API response status:', response.status);
+  secureLogger.info('TTS API response received', { status: response.status });
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('ElevenLabs API error:', response.status, errorText);
+    secureLogger.error('ElevenLabs API error', { status: response.status, error: errorText });
     
     if (response.status === 401) {
-      console.error('Invalid API key. Please check your ElevenLabs API key.');
       throw new Error('Invalid ElevenLabs API key. Please verify your credentials.');
     }
     
     if (response.status === 429) {
-      console.error('Rate limit exceeded. Please try again later.');
       throw new Error('Rate limit exceeded. Please try again in a moment.');
     }
     
-    throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`);
+    throw new Error(`ElevenLabs API error: ${response.status}`);
   }
 
   const audioBlob = await response.blob();
-  console.log('Audio blob created, size:', audioBlob.size, 'bytes');
+  secureLogger.info('Audio blob created successfully', { size: audioBlob.size });
   
   return audioBlob;
 };
@@ -76,11 +99,32 @@ export const cloneVoice = async (
   description: string,
   audioFiles: File[]
 ): Promise<string> => {
-  console.log('Starting voice cloning process...');
+  // Rate limiting check
+  if (!inputValidator.checkRateLimit()) {
+    secureLogger.warn('Rate limit exceeded for voice cloning');
+    throw new Error('Rate limit exceeded. Please wait before making another request.');
+  }
+
+  // Input validation
+  const apiKeyValidation = inputValidator.validateApiKey(apiKey);
+  if (!apiKeyValidation.isValid) {
+    secureLogger.warn('Invalid API key for voice cloning');
+    throw new Error('Invalid API key provided');
+  }
+
+  const nameValidation = inputValidator.validateTextInput(name);
+  const descValidation = inputValidator.validateTextInput(description);
+
+  if (!nameValidation.isValid || !descValidation.isValid) {
+    secureLogger.warn('Invalid input for voice cloning');
+    throw new Error('Invalid name or description provided');
+  }
+
+  secureLogger.info('Starting voice cloning process', { fileCount: audioFiles.length });
   
   const formData = new FormData();
-  formData.append('name', name);
-  formData.append('description', description);
+  formData.append('name', nameValidation.sanitizedInput);
+  formData.append('description', descValidation.sanitizedInput);
   
   audioFiles.forEach((file, index) => {
     formData.append(`files`, file);
@@ -89,29 +133,34 @@ export const cloneVoice = async (
   const response = await fetch('https://api.elevenlabs.io/v1/voices/add', {
     method: 'POST',
     headers: {
-      'xi-api-key': apiKey,
+      'xi-api-key': apiKeyValidation.sanitizedInput,
     },
     body: formData,
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('Voice cloning error:', response.status, errorText);
-    throw new Error(`Voice cloning failed: ${response.status} - ${errorText}`);
+    secureLogger.error('Voice cloning API error', { status: response.status });
+    throw new Error(`Voice cloning failed: ${response.status}`);
   }
 
   const data = await response.json();
-  console.log('Voice cloned successfully:', data.voice_id);
+  secureLogger.info('Voice cloned successfully');
   
   return data.voice_id;
 };
 
 // Get available voices
 export const getAvailableVoices = async (apiKey: string) => {
+  const apiKeyValidation = inputValidator.validateApiKey(apiKey);
+  if (!apiKeyValidation.isValid) {
+    throw new Error('Invalid API key provided');
+  }
+
   const response = await fetch('https://api.elevenlabs.io/v1/voices', {
     method: 'GET',
     headers: {
-      'xi-api-key': apiKey,
+      'xi-api-key': apiKeyValidation.sanitizedInput,
     },
   });
 

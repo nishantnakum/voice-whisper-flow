@@ -1,36 +1,44 @@
 
-import { useApiKeyStorage } from './useApiKeyStorage';
+import { useSecureApiKeyStorage } from './useSecureApiKeyStorage';
 import { useAudioPlayer } from './useAudioPlayer';
 import { synthesizeSpeech } from '@/utils/elevenLabsApi';
 import { addHumanExpressions } from '@/utils/textEnhancer';
+import { secureLogger } from '@/utils/secureLogger';
+import { inputValidator } from '@/utils/inputValidator';
 
 export const useElevenLabsSpeech = () => {
-  const { apiKey, setApiKey } = useApiKeyStorage();
+  const { apiKey, setApiKey, hasApiKey } = useSecureApiKeyStorage();
   const { isPlaying, playAudio, stopAudio } = useAudioPlayer();
 
   const speakText = async (text: string) => {
-    console.log('=== ELEVENLABS TTS START ===');
-    console.log('Text to speak:', text);
+    secureLogger.info('ElevenLabs TTS request initiated');
     
-    if (!apiKey) {
-      console.error('ElevenLabs API key not provided');
-      return;
+    if (!hasApiKey) {
+      secureLogger.warn('ElevenLabs API key not provided');
+      throw new Error('ElevenLabs API key required. Please provide your API key in settings.');
+    }
+
+    // Input validation
+    const textValidation = inputValidator.validateTextInput(text);
+    if (!textValidation.isValid) {
+      secureLogger.warn('Invalid text input for TTS', { errors: textValidation.errors });
+      throw new Error(`Invalid input: ${textValidation.errors.join(', ')}`);
     }
 
     try {
       // Add natural human expressions to the text
-      const enhancedText = addHumanExpressions(text);
-      console.log('Enhanced text for ElevenLabs:', enhancedText);
-      console.log('Using API key:', apiKey.substring(0, 10) + '...');
+      const enhancedText = addHumanExpressions(textValidation.sanitizedInput);
+      secureLogger.debug('Text enhanced for TTS', { originalLength: text.length, enhancedLength: enhancedText.length });
       
       const audioBlob = await synthesizeSpeech(enhancedText, apiKey);
       await playAudio(audioBlob);
       
     } catch (error) {
-      console.error('Error with ElevenLabs TTS:', error);
+      secureLogger.error('Error with ElevenLabs TTS', { error: error.message });
+      throw error;
     }
     
-    console.log('=== ELEVENLABS TTS END ===');
+    secureLogger.info('ElevenLabs TTS completed successfully');
   };
 
   return {
@@ -38,6 +46,7 @@ export const useElevenLabsSpeech = () => {
     speakText,
     stopSpeaking: stopAudio,
     setApiKey,
-    apiKey,
+    apiKey: hasApiKey ? '***CONFIGURED***' : '',
+    hasApiKey,
   };
 };
