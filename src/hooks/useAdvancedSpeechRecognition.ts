@@ -228,11 +228,12 @@ export const useAdvancedSpeechRecognition = (
         setIsRecording(true);
       });
 
-      recognitionRef.current.addEventListener('result', async (event: SpeechRecognitionEvent) => {
+      recognitionRef.current.addEventListener('result', async (event: Event) => {
+        const speechEvent = event as SpeechRecognitionEvent;
         setIsProcessing(true);
         
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
+        for (let i = speechEvent.resultIndex; i < speechEvent.results.length; i++) {
+          const result = speechEvent.results[i];
           const transcript = result[0].transcript;
           const confidence = result[0].confidence;
 
@@ -268,8 +269,9 @@ export const useAdvancedSpeechRecognition = (
         setIsProcessing(false);
       });
 
-      recognitionRef.current.addEventListener('error', (event: SpeechRecognitionErrorEvent) => {
-        console.error('Speech recognition error:', event.error);
+      recognitionRef.current.addEventListener('error', (event: Event) => {
+        const errorEvent = event as SpeechRecognitionErrorEvent;
+        console.error('Speech recognition error:', errorEvent.error);
         setIsRecording(false);
         setIsProcessing(false);
       });
