@@ -1,39 +1,50 @@
 
-// Add natural human expressions to make speech more realistic
-export const addHumanExpressions = (text: string): string => {
+import { analyzeEmotionalTone, adaptVoiceForTone, addHumanExpressionsAdvanced, VoiceCharacteristics } from './advancedTextEnhancer';
+
+export const addHumanExpressions = (
+  text: string, 
+  characteristics?: VoiceCharacteristics
+): string => {
+  if (characteristics) {
+    return addHumanExpressionsAdvanced(text, characteristics);
+  }
+
+  // Fallback to basic implementation
   let enhancedText = text;
-  
-  // Add thinking sounds at the beginning for questions
-  if (text.includes('?') || text.toLowerCase().includes('what') || text.toLowerCase().includes('how')) {
-    enhancedText = '*hmm* ' + enhancedText;
+
+  // Add natural pauses and hesitations
+  const thoughtfulPhrases = [
+    'Well, ',
+    'You know, ',
+    'I think ',
+    'It seems to me that ',
+    'From my perspective, ',
+    'Let me consider this... '
+  ];
+
+  // Add occasional thoughtful beginning (20% chance)
+  if (Math.random() < 0.2) {
+    const randomPhrase = thoughtfulPhrases[Math.floor(Math.random() * thoughtfulPhrases.length)];
+    enhancedText = randomPhrase + enhancedText.toLowerCase();
   }
-  
-  // Add breathing pauses for longer sentences
-  if (text.length > 50) {
-    enhancedText = enhancedText.replace(/\. /g, '. *takes a breath* ');
-  }
-  
-  // Add expressions for emotions
-  if (text.includes('!') || text.toLowerCase().includes('great') || text.toLowerCase().includes('awesome')) {
-    enhancedText = enhancedText.replace(/!/, ' *chuckles* !');
-  }
-  
-  // Add hesitation for complex topics
-  if (text.toLowerCase().includes('complex') || text.toLowerCase().includes('difficult')) {
-    enhancedText = '*umm* ' + enhancedText;
-  }
-  
-  // Add natural pauses with breathing sounds
-  enhancedText = enhancedText.replace(/,/g, ', *pause*');
-  
-  // Add occasional breathing sounds for longer responses
-  if (text.length > 100) {
-    const sentences = enhancedText.split('. ');
-    if (sentences.length > 2) {
-      sentences[Math.floor(sentences.length / 2)] = '*inhales* ' + sentences[Math.floor(sentences.length / 2)];
-    }
-    enhancedText = sentences.join('. ');
-  }
-  
+
+  // Add emphasis to important points
+  enhancedText = enhancedText.replace(/\b(very important|crucial|essential|critical)\b/gi, match => 
+    `*${match}*`
+  );
+
+  // Add natural transitions
+  enhancedText = enhancedText.replace(/\. ([A-Z])/g, (match, p1) => 
+    `. ... ${p1}`
+  );
+
   return enhancedText;
 };
+
+// Re-export advanced functions
+export { 
+  analyzeEmotionalTone, 
+  adaptVoiceForTone,
+  addHumanExpressionsAdvanced,
+  generateVoiceStylesheet 
+} from './advancedTextEnhancer';

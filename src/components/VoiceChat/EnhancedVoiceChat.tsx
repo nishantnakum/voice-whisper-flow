@@ -2,16 +2,17 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MessageCircle, Brain, Upload } from 'lucide-react';
-import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
-import { useSpeechSynthesis } from '@/hooks/useSpeechSynthesis';
+import { useAdvancedSpeechRecognition, SpeechConfig, SpeechResult } from '@/hooks/useAdvancedSpeechRecognition';
+import { useElevenLabsVoiceEngine } from '@/hooks/useElevenLabsVoiceEngine';
 import { useVisionCapabilities } from '@/hooks/useVisionCapabilities';
 import { useConversationMemory } from '@/hooks/useConversationMemory';
 import { useProjectKnowledge } from '@/hooks/useProjectKnowledge';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { generateEnhancedAIResponse } from '@/services/enhancedAIService';
+import { analyzeEmotionalTone } from '@/utils/advancedTextEnhancer';
 import { AI_MODES } from '@/config/aiModes';
 import { Message, MessageAttachment } from '@/types/ai';
-import { ControlPanel } from './ControlPanel';
+import { AdvancedVoiceControlPanel } from './AdvancedVoiceControlPanel';
 import { TranscriptDisplay } from './TranscriptDisplay';
 import { ProcessingIndicator } from './ProcessingIndicator';
 import { EnhancedMessageList } from './EnhancedMessageList';
@@ -25,10 +26,32 @@ const EnhancedVoiceChat = () => {
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentMode, setCurrentMode] = useState('brainstormer');
-  const [userName, setUserName] = useState('User');
+  const [userName, setUserName] = useState('World Leader');
   const [pendingAttachments, setPendingAttachments] = useState<MessageAttachment[]>([]);
+  const [speechConfig, setSpeechConfig] = useState<SpeechConfig>({
+    language: 'en-US',
+    enableTranslation: false,
+    noiseFiltering: true,
+    speakerRecognition: true,
+    confidenceThreshold: 0.8
+  });
 
-  const { speakText, stopSpeaking, isPlaying } = useSpeechSynthesis();
+  // Advanced Voice Hooks
+  const {
+    isPlaying,
+    isProcessing: voiceProcessing,
+    currentPersonality,
+    availablePersonalities,
+    voiceQuality,
+    speakWithPersonality,
+    switchPersonality,
+    getPersonalityForContext,
+    setVoiceQuality,
+    stopSpeaking,
+    setApiKey: setVoiceApiKey,
+    apiKey: voiceApiKey
+  } = useElevenLabsVoiceEngine();
+
   const { analyzeImage, analyzeDocument, createAttachment, isProcessing: isAnalyzing } = useVisionCapabilities();
   const { getContextualKnowledge, addKnowledge } = useProjectKnowledge();
   const userPreferences = useUserPreferences();
@@ -45,7 +68,7 @@ const EnhancedVoiceChat = () => {
   // Initialize with a default conversation
   useEffect(() => {
     if (!currentConversation) {
-      createNewConversation('New Brainstorming Session', 'default');
+      createNewConversation('Strategic AI Session', 'default');
     }
   }, [currentConversation, createNewConversation]);
 
@@ -63,7 +86,16 @@ const EnhancedVoiceChat = () => {
     return currentConversation?.messages || [];
   };
 
-  const handleUserMessage = useCallback(async (text: string) => {
+  const handleSpeechResult = useCallback(async (result: SpeechResult) => {
+    console.log('Advanced speech result received:', result);
+    
+    if (result.confidence >= speechConfig.confidenceThreshold) {
+      const textToProcess = result.translatedText || result.transcript;
+      await handleUserMessage(textToProcess, result);
+    }
+  }, [speechConfig.confidenceThreshold]);
+
+  const handleUserMessage = useCallback(async (text: string, speechResult?: SpeechResult) => {
     console.log('handleUserMessage called with:', text, 'mode:', currentMode);
     
     if (isPlaying) {
@@ -83,6 +115,14 @@ const EnhancedVoiceChat = () => {
       timestamp: new Date(),
       attachments: pendingAttachments.length > 0 ? [...pendingAttachments] : undefined,
       mode: currentMode,
+      metadata: speechResult ? {
+        speechData: {
+          confidence: speechResult.confidence,
+          language: speechResult.language,
+          speakerId: speechResult.speakerId,
+          audioLevel: speechResult.audioLevel
+        }
+      } : undefined
     };
 
     console.log('Adding user message:', userMessage);
@@ -96,7 +136,11 @@ const EnhancedVoiceChat = () => {
         `User Input - ${new Date().toLocaleDateString()}`,
         text,
         'note',
-        { mode: currentMode, timestamp: new Date() }
+        { 
+          mode: currentMode, 
+          timestamp: new Date(),
+          speechMetadata: speechResult 
+        }
       );
     }
 
@@ -112,7 +156,10 @@ const EnhancedVoiceChat = () => {
         chatHistory: getCurrentMessages(),
         attachments: userMessage.attachments,
         userName,
-        context: currentConversation.context,
+        context: {
+          ...currentConversation.context,
+          speechData: speechResult
+        },
         knowledgeBase: relevantKnowledge,
         userPreferences
       });
@@ -138,26 +185,45 @@ const EnhancedVoiceChat = () => {
         { mode: currentMode, timestamp: new Date(), userQuery: text }
       );
       
-      console.log('Speaking AI response...');
-      speakText(aiResponse);
+      // Analyze emotional tone and select appropriate voice personality
+      const emotionalTone = analyzeEmotionalTone(aiResponse);
+      const messageType = currentMode === 'business_strategist' ? 'strategic' :
+                         currentMode === 'creative_writer' ? 'creative' :
+                         currentMode === 'research_assistant' ? 'analytical' : 'diplomatic';
+      
+      const appropriatePersonality = getPersonalityForContext(currentMode, messageType);
+      
+      console.log('Speaking with personality:', appropriatePersonality.name, 'for tone:', emotionalTone);
+      
+      await speakWithPersonality(aiResponse, appropriatePersonality, {
+        sentiment: emotionalTone.sentiment,
+        urgency: emotionalTone.intensity > 0.7 ? 'high' : emotionalTone.intensity > 0.4 ? 'medium' : 'low',
+        formality: appropriatePersonality.characteristics.formality
+      });
+      
     } catch (error) {
       console.error('Error generating enhanced AI response:', error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
-        text: "I apologize, but I encountered an error processing your request. Please try again or try a different approach.",
+        text: "I apologize, but I encountered an error processing your request. Please ensure your connection is stable and try again.",
         timestamp: new Date(),
         mode: currentMode,
       };
       addMessageToConversation(currentConversation.id, errorMessage);
       setIsProcessing(false);
     }
-  }, [speakText, isPlaying, currentMode, userName, currentConversation, pendingAttachments, addMessageToConversation, getCurrentMessages, getContextualKnowledge, addKnowledge, userPreferences]);
+  }, [isPlaying, currentMode, userName, currentConversation, pendingAttachments, addMessageToConversation, getCurrentMessages, getContextualKnowledge, addKnowledge, userPreferences, speakWithPersonality, getPersonalityForContext]);
 
-  const { isRecording, currentTranscript, toggleRecording } = useSpeechRecognition(
-    handleUserMessage, 
-    isPlaying
-  );
+  const {
+    isRecording,
+    isProcessing: speechProcessing,
+    currentTranscript,
+    audioLevel,
+    detectedLanguage,
+    supportedLanguages,
+    toggleRecording
+  } = useAdvancedSpeechRecognition(handleSpeechResult, speechConfig);
 
   const handleFileUpload = async (files: File[]) => {
     const newAttachments: MessageAttachment[] = [];
@@ -208,6 +274,10 @@ const EnhancedVoiceChat = () => {
     createNewConversation(title, 'default');
   };
 
+  const handleSpeechConfigChange = (updates: Partial<SpeechConfig>) => {
+    setSpeechConfig(prev => ({ ...prev, ...updates }));
+  };
+
   const currentAIMode = AI_MODES.find(mode => mode.id === currentMode);
 
   console.log('EnhancedVoiceChat state:', { 
@@ -218,7 +288,9 @@ const EnhancedVoiceChat = () => {
     currentTranscript,
     currentMode,
     conversationsCount: conversations.length,
-    pendingAttachments: pendingAttachments.length
+    pendingAttachments: pendingAttachments.length,
+    voicePersonality: currentPersonality.name,
+    speechConfig
   });
 
   return (
@@ -226,12 +298,15 @@ const EnhancedVoiceChat = () => {
       <Card>
         <CardHeader className="text-center">
           <CardTitle className="flex items-center justify-center gap-2">
-            <Brain className="h-6 w-6" />
-            Enhanced AI Brainstormer by Noesis.tech
+            <Brain className="h-6 w-6 text-purple-600" />
+            Advanced AI Command Center by Noesis.tech
             <span className="text-sm font-normal text-blue-600 ml-2">
-              ({currentAIMode?.name || 'Advanced Mode'})
+              ({currentAIMode?.name || 'Strategic Mode'})
             </span>
           </CardTitle>
+          <p className="text-sm text-gray-600">
+            Professional-grade AI assistance with advanced voice capabilities for world leaders
+          </p>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -242,6 +317,25 @@ const EnhancedVoiceChat = () => {
                 userName={userName}
                 onUserNameChange={setUserName}
                 onNewConversation={handleNewConversation}
+              />
+
+              <AdvancedVoiceControlPanel
+                isRecording={isRecording}
+                isProcessing={speechProcessing || voiceProcessing}
+                audioLevel={audioLevel}
+                detectedLanguage={detectedLanguage}
+                supportedLanguages={supportedLanguages}
+                speechConfig={speechConfig}
+                onSpeechConfigChange={handleSpeechConfigChange}
+                onToggleRecording={toggleRecording}
+                isPlaying={isPlaying}
+                currentPersonality={currentPersonality}
+                voiceQuality={voiceQuality}
+                onPersonalityChange={switchPersonality}
+                onVoiceQualityChange={setVoiceQuality}
+                onStopSpeaking={stopSpeaking}
+                apiKey={voiceApiKey}
+                onApiKeyChange={setVoiceApiKey}
               />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -255,19 +349,12 @@ const EnhancedVoiceChat = () => {
                 <ScreenSharePanel onScreenAnalysis={handleScreenAnalysis} />
               </div>
 
-              <ControlPanel
-                isRecording={isRecording}
-                isPlaying={isPlaying}
-                onToggleRecording={toggleRecording}
-                onStopSpeaking={stopSpeaking}
-              />
-
               <TranscriptDisplay
                 isRecording={isRecording}
                 currentTranscript={currentTranscript}
               />
 
-              <ProcessingIndicator isProcessing={isProcessing || isAnalyzing} />
+              <ProcessingIndicator isProcessing={isProcessing || isAnalyzing || speechProcessing || voiceProcessing} />
 
               <EnhancedMessageList messages={getCurrentMessages()} />
             </div>
