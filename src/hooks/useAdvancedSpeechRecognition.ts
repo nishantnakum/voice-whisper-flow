@@ -171,7 +171,7 @@ export const useAdvancedSpeechRecognition = (
 
     try {
       // Basic voice print analysis using audio characteristics
-      const fundamentalFreq = await estimateFundamentalFrequency(audioData);
+      const fundamentalFreq = await estimateFundamentalFreq(audioData);
       const spectralCentroid = calculateSpectralCentroid(audioData);
       
       // Simple speaker classification based on voice characteristics
@@ -239,12 +239,12 @@ export const useAdvancedSpeechRecognition = (
       recognitionRef.current.interimResults = true;
       recognitionRef.current.lang = config.language;
 
-      recognitionRef.current.onstart = () => {
+      recognitionRef.current.addEventListener('start', () => {
         console.log('Advanced speech recognition started');
         setIsRecording(true);
-      };
+      });
 
-      recognitionRef.current.onresult = async (event) => {
+      recognitionRef.current.addEventListener('result', async (event) => {
         setIsProcessing(true);
         
         for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -285,15 +285,15 @@ export const useAdvancedSpeechRecognition = (
         }
         
         setIsProcessing(false);
-      };
+      });
 
-      recognitionRef.current.onerror = (event) => {
+      recognitionRef.current.addEventListener('error', (event) => {
         console.error('Speech recognition error:', event.error);
         setIsRecording(false);
         setIsProcessing(false);
-      };
+      });
 
-      recognitionRef.current.onend = () => {
+      recognitionRef.current.addEventListener('end', () => {
         console.log('Speech recognition ended');
         setIsRecording(false);
         setIsProcessing(false);
@@ -301,7 +301,7 @@ export const useAdvancedSpeechRecognition = (
         if (animationFrameRef.current) {
           cancelAnimationFrame(animationFrameRef.current);
         }
-      };
+      });
 
       recognitionRef.current.start();
     } catch (error) {
