@@ -55,7 +55,23 @@ class SecureLogger {
     const sanitizedArgs = args.map(arg => this.sanitizeData(arg));
     const timestamp = new Date().toISOString();
     
-    console[level as keyof Console](`[${timestamp}] ${message}`, ...sanitizedArgs);
+    // Type-safe console method calls
+    switch (level) {
+      case LOG_LEVELS.ERROR:
+        console.error(`[${timestamp}] ${message}`, ...sanitizedArgs);
+        break;
+      case LOG_LEVELS.WARN:
+        console.warn(`[${timestamp}] ${message}`, ...sanitizedArgs);
+        break;
+      case LOG_LEVELS.INFO:
+        console.info(`[${timestamp}] ${message}`, ...sanitizedArgs);
+        break;
+      case LOG_LEVELS.DEBUG:
+        console.debug(`[${timestamp}] ${message}`, ...sanitizedArgs);
+        break;
+      default:
+        console.log(`[${timestamp}] ${message}`, ...sanitizedArgs);
+    }
   }
 
   error(message: string, ...args: any[]) {
