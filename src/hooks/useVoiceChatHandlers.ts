@@ -1,6 +1,6 @@
 
 import { useCallback } from 'react';
-import { Message, MessageAttachment } from '@/types/ai';
+import { Message, MessageAttachment, ProjectKnowledge } from '@/types/ai';
 import { SpeechResult } from '@/hooks/useAdvancedSpeechRecognition';
 import { generateEnhancedAIResponse } from '@/services/enhancedAIService';
 import { analyzeEmotionalTone } from '@/utils/advancedTextEnhancer';
@@ -18,7 +18,7 @@ interface UseVoiceChatHandlersProps {
   setIsProcessing: (processing: boolean) => void;
   getCurrentMessages: () => Message[];
   getContextualKnowledge: (text: string, limit: number) => any[];
-  addKnowledge: (title: string, content: string, type: string, metadata: any) => Promise<void>;
+  addKnowledge: (title: string, content: string, type: 'document' | 'image' | 'note' | 'research', metadata?: Record<string, any>) => Promise<ProjectKnowledge>;
   userPreferences: any;
   speakWithPersonality: (text: string, personality?: any, context?: any) => Promise<void>;
   getPersonalityForContext: (mode: string, type: string) => any;
