@@ -1,144 +1,61 @@
 
 import { useState, useEffect } from 'react';
 import { UserPreferences } from '@/types/ai';
-
-const STORAGE_KEY = 'user_preferences';
-const ANALYTICS_KEY = 'user_analytics';
-
-interface UserAnalytics {
-  sessionCount: number;
-  totalInteractions: number;
-  preferredModes: Record<string, number>;
-  averageSessionLength: number;
-  topicInterests: Record<string, number>;
-  responsePreferences: {
-    preferredLength: 'short' | 'medium' | 'long';
-    preferredStyle: 'formal' | 'casual' | 'technical';
-    includeExamples: boolean;
-  };
-  lastActive: Date;
-}
+import { 
+  UserAnalytics, 
+  FeedbackContext,
+  createDefaultPreferences, 
+  createDefaultAnalytics 
+} from './userPreferences/types';
+import { 
+  loadPreferences, 
+  savePreferences, 
+  loadAnalytics, 
+  saveAnalytics 
+} from './userPreferences/storage';
+import { 
+  trackInteraction as trackAnalyticsInteraction, 
+  getPersonalizedSettings as getAnalyticsPersonalizedSettings,
+  processLearningFeedback 
+} from './userPreferences/analytics';
 
 export const useUserPreferences = (userId: string = 'default') => {
-  const [preferences, setPreferences] = useState<UserPreferences>({
-    userId,
-    preferredMode: 'brainstormer',
-    voiceSettings: {
-      speed: 1.0,
-      voice: 'default',
-      enabled: true
-    },
-    aiSettings: {
-      creativity: 0.7,
-      verbosity: 0.5,
-      includeReferences: true
-    }
-  });
+  const [preferences, setPreferences] = useState<UserPreferences>(
+    createDefaultPreferences(userId)
+  );
   
-  const [analytics, setAnalytics] = useState<UserAnalytics>({
-    sessionCount: 0,
-    totalInteractions: 0,
-    preferredModes: {},
-    averageSessionLength: 0,
-    topicInterests: {},
-    responsePreferences: {
-      preferredLength: 'medium',
-      preferredStyle: 'casual',
-      includeExamples: true
-    },
-    lastActive: new Date()
-  });
+  const [analytics, setAnalytics] = useState<UserAnalytics>(
+    createDefaultAnalytics()
+  );
 
   useEffect(() => {
-    loadPreferences();
-    loadAnalytics();
+    const loadedPreferences = loadPreferences(userId);
+    if (loadedPreferences) {
+      setPreferences({ ...preferences, ...loadedPreferences });
+    }
+
+    const loadedAnalytics = loadAnalytics(userId);
+    if (loadedAnalytics) {
+      setAnalytics(loadedAnalytics);
+    }
   }, [userId]);
-
-  const loadPreferences = () => {
-    try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_${userId}`);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setPreferences({ ...preferences, ...parsed });
-      }
-    } catch (error) {
-      console.error('Error loading preferences:', error);
-    }
-  };
-
-  const loadAnalytics = () => {
-    try {
-      const saved = localStorage.getItem(`${ANALYTICS_KEY}_${userId}`);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setAnalytics({
-          ...parsed,
-          lastActive: new Date(parsed.lastActive)
-        });
-      }
-    } catch (error) {
-      console.error('Error loading analytics:', error);
-    }
-  };
-
-  const savePreferences = (newPreferences: UserPreferences) => {
-    try {
-      localStorage.setItem(`${STORAGE_KEY}_${userId}`, JSON.stringify(newPreferences));
-      setPreferences(newPreferences);
-    } catch (error) {
-      console.error('Error saving preferences:', error);
-    }
-  };
-
-  const saveAnalytics = (newAnalytics: UserAnalytics) => {
-    try {
-      localStorage.setItem(`${ANALYTICS_KEY}_${userId}`, JSON.stringify(newAnalytics));
-      setAnalytics(newAnalytics);
-    } catch (error) {
-      console.error('Error saving analytics:', error);
-    }
-  };
 
   const updatePreferences = (updates: Partial<UserPreferences>) => {
     const updatedPreferences = { ...preferences, ...updates };
-    savePreferences(updatedPreferences);
+    savePreferences(userId, updatedPreferences);
+    setPreferences(updatedPreferences);
   };
 
   const trackInteraction = (mode: string, topic: string, sessionDuration?: number) => {
-    const updatedAnalytics = {
-      ...analytics,
-      totalInteractions: analytics.totalInteractions + 1,
-      preferredModes: {
-        ...analytics.preferredModes,
-        [mode]: (analytics.preferredModes[mode] || 0) + 1
-      },
-      topicInterests: {
-        ...analytics.topicInterests,
-        [topic]: (analytics.topicInterests[topic] || 0) + 1
-      },
-      lastActive: new Date()
-    };
-
-    if (sessionDuration) {
-      updatedAnalytics.averageSessionLength = 
-        (analytics.averageSessionLength * analytics.sessionCount + sessionDuration) / 
-        (analytics.sessionCount + 1);
-      updatedAnalytics.sessionCount = analytics.sessionCount + 1;
-    }
-
-    saveAnalytics(updatedAnalytics);
+    const updatedAnalytics = trackAnalyticsInteraction(analytics, mode, topic, sessionDuration);
+    saveAnalytics(userId, updatedAnalytics);
+    setAnalytics(updatedAnalytics);
   };
 
-  const learnFromFeedback = (feedback: 'positive' | 'negative', context: {
-    mode: string;
-    responseLength: number;
-    includedReferences: boolean;
-    topic: string;
-  }) => {
+  const learnFromFeedback = (feedback: 'positive' | 'negative', context: FeedbackContext) => {
     const updatedPreferences = { ...preferences };
     
     if (feedback === 'positive') {
-      // Reinforce successful patterns
       if (context.responseLength < 200) {
         updatedPreferences.aiSettings.verbosity = Math.max(0, updatedPreferences.aiSettings.verbosity - 0.1);
       } else if (context.responseLength > 800) {
@@ -147,50 +64,22 @@ export const useUserPreferences = (userId: string = 'default') => {
       
       updatedPreferences.aiSettings.includeReferences = context.includedReferences;
     } else {
-      // Adjust based on negative feedback
-      updatedPreferences.aiSettings.verbosity = 0.5; // Reset to middle ground
+      updatedPreferences.aiSettings.verbosity = 0.5;
     }
 
-    savePreferences(updatedPreferences);
+    savePreferences(userId, updatedPreferences);
+    setPreferences(updatedPreferences);
     
-    // Update analytics with proper type checking
-    let preferredLength: 'short' | 'medium' | 'long';
-    if (context.responseLength < 300) {
-      preferredLength = 'short';
-    } else if (context.responseLength > 700) {
-      preferredLength = 'long';
-    } else {
-      preferredLength = 'medium';
-    }
-
-    const updatedAnalytics = {
-      ...analytics,
-      responsePreferences: {
-        ...analytics.responsePreferences,
-        preferredLength
-      }
-    };
-    
-    saveAnalytics(updatedAnalytics);
+    const updatedAnalytics = processLearningFeedback(analytics, feedback, context);
+    saveAnalytics(userId, updatedAnalytics);
+    setAnalytics(updatedAnalytics);
   };
 
   const getPersonalizedSettings = () => {
-    const mostUsedMode = Object.entries(analytics.preferredModes)
-      .sort(([,a], [,b]) => b - a)[0]?.[0] || preferences.preferredMode;
-
-    const topInterests = Object.entries(analytics.topicInterests)
-      .sort(([,a], [,b]) => b - a)
-      .slice(0, 5)
-      .map(([topic]) => topic);
-
+    const analyticsSettings = getAnalyticsPersonalizedSettings(analytics, preferences.preferredMode);
+    
     return {
-      recommendedMode: mostUsedMode,
-      topInterests,
-      sessionStats: {
-        totalSessions: analytics.sessionCount,
-        totalInteractions: analytics.totalInteractions,
-        averageSessionLength: analytics.averageSessionLength
-      },
+      ...analyticsSettings,
       adaptedSettings: {
         creativity: preferences.aiSettings.creativity,
         verbosity: preferences.aiSettings.verbosity,
@@ -200,22 +89,9 @@ export const useUserPreferences = (userId: string = 'default') => {
   };
 
   const resetPreferences = () => {
-    const defaultPreferences: UserPreferences = {
-      userId,
-      preferredMode: 'brainstormer',
-      voiceSettings: {
-        speed: 1.0,
-        voice: 'default',
-        enabled: true
-      },
-      aiSettings: {
-        creativity: 0.7,
-        verbosity: 0.5,
-        includeReferences: true
-      }
-    };
-    
-    savePreferences(defaultPreferences);
+    const defaultPreferences = createDefaultPreferences(userId);
+    savePreferences(userId, defaultPreferences);
+    setPreferences(defaultPreferences);
   };
 
   const exportUserData = () => {

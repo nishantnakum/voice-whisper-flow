@@ -1,14 +1,14 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MessageCircle, Brain, Upload } from 'lucide-react';
-import { useAdvancedSpeechRecognition, SpeechConfig, SpeechResult } from '@/hooks/useAdvancedSpeechRecognition';
+import { Brain, Settings } from 'lucide-react';
+import { useAdvancedSpeechRecognition } from '@/hooks/useAdvancedSpeechRecognition';
 import { useElevenLabsVoiceEngine } from '@/hooks/useElevenLabsVoiceEngine';
 import { useVisionCapabilities } from '@/hooks/useVisionCapabilities';
 import { useConversationMemory } from '@/hooks/useConversationMemory';
 import { useProjectKnowledge } from '@/hooks/useProjectKnowledge';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
-import { generateEnhancedAIResponse } from '@/services/enhancedAIService';
-import { analyzeEmotionalTone } from '@/utils/advancedTextEnhancer';
+import { useVoiceChatState } from '@/hooks/useVoiceChatState';
+import { useVoiceChatHandlers } from '@/hooks/useVoiceChatHandlers';
 import { AI_MODES } from '@/config/aiModes';
 import { Message, MessageAttachment } from '@/types/ai';
 import { AdvancedVoiceControlPanel } from './AdvancedVoiceControlPanel';
@@ -20,29 +20,30 @@ import { FileUploadArea } from './FileUploadArea';
 import { ConversationHistory } from './ConversationHistory';
 import { ScreenSharePanel } from './ScreenSharePanel';
 import { Button } from '@/components/ui/button';
-import { Settings } from 'lucide-react';
 
 const EnhancedVoiceChat = () => {
   console.log('EnhancedVoiceChat component rendering...');
   
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [currentMode, setCurrentMode] = useState('brainstormer');
-  const [userName, setUserName] = useState('World Leader');
-  const [pendingAttachments, setPendingAttachments] = useState<MessageAttachment[]>([]);
-  const [speechConfig, setSpeechConfig] = useState<SpeechConfig>({
-    language: 'en-US',
-    enableTranslation: false,
-    noiseFiltering: true,
-    speakerRecognition: true,
-    confidenceThreshold: 0.8
-  });
+  const {
+    isProcessing,
+    setIsProcessing,
+    currentMode,
+    setCurrentMode,
+    userName,
+    setUserName,
+    pendingAttachments,
+    setPendingAttachments,
+    speechConfig,
+    handleSpeechConfigChange,
+    removePendingAttachment,
+    clearPendingAttachments
+  } = useVoiceChatState();
 
-  // Advanced Voice Hooks
+  // Voice Engine Hook
   const {
     isPlaying,
     isProcessing: voiceProcessing,
     currentPersonality,
-    availablePersonalities,
     voiceQuality,
     speakWithPersonality,
     switchPersonality,
@@ -53,6 +54,7 @@ const EnhancedVoiceChat = () => {
     apiKey: voiceApiKey
   } = useElevenLabsVoiceEngine();
 
+  // Other hooks
   const { analyzeImage, analyzeDocument, createAttachment, isProcessing: isAnalyzing } = useVisionCapabilities();
   const { getContextualKnowledge, addKnowledge } = useProjectKnowledge();
   const userPreferences = useUserPreferences();
@@ -62,8 +64,7 @@ const EnhancedVoiceChat = () => {
     currentConversation,
     createNewConversation,
     addMessageToConversation,
-    loadConversation,
-    setCurrentConversation
+    loadConversation
   } = useConversationMemory();
 
   // Initialize with a default conversation
@@ -87,135 +88,26 @@ const EnhancedVoiceChat = () => {
     return currentConversation?.messages || [];
   };
 
-  const handleSpeechResult = useCallback(async (result: SpeechResult) => {
-    console.log('Advanced speech result received:', result);
-    
-    if (result.confidence >= speechConfig.confidenceThreshold) {
-      const textToProcess = result.translatedText || result.transcript;
-      await handleUserMessage(textToProcess, result);
-    }
-  }, [speechConfig.confidenceThreshold]);
+  // Voice Chat Handlers
+  const { handleUserMessage, handleSpeechResult } = useVoiceChatHandlers({
+    currentMode,
+    userName,
+    isPlaying,
+    currentConversation,
+    pendingAttachments,
+    speechConfigConfidenceThreshold: speechConfig.confidenceThreshold,
+    addMessageToConversation,
+    clearPendingAttachments,
+    setIsProcessing,
+    getCurrentMessages,
+    getContextualKnowledge,
+    addKnowledge,
+    userPreferences,
+    speakWithPersonality,
+    getPersonalityForContext
+  });
 
-  const handleUserMessage = useCallback(async (text: string, speechResult?: SpeechResult) => {
-    console.log('handleUserMessage called with:', text, 'mode:', currentMode);
-    
-    if (isPlaying) {
-      console.log('Skipping message processing because AI is speaking');
-      return;
-    }
-
-    if (!currentConversation) {
-      console.error('No current conversation');
-      return;
-    }
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      type: 'user',
-      text: text.trim(),
-      timestamp: new Date(),
-      attachments: pendingAttachments.length > 0 ? [...pendingAttachments] : undefined,
-      mode: currentMode,
-      metadata: speechResult ? {
-        speechData: {
-          confidence: speechResult.confidence,
-          language: speechResult.language,
-          speakerId: speechResult.speakerId,
-          audioLevel: speechResult.audioLevel
-        }
-      } : undefined
-    };
-
-    console.log('Adding user message:', userMessage);
-    addMessageToConversation(currentConversation.id, userMessage);
-    setPendingAttachments([]);
-    setIsProcessing(true);
-
-    // Add to knowledge base if significant
-    if (text.length > 50) {
-      await addKnowledge(
-        `User Input - ${new Date().toLocaleDateString()}`,
-        text,
-        'note',
-        { 
-          mode: currentMode, 
-          timestamp: new Date(),
-          speechMetadata: speechResult 
-        }
-      );
-    }
-
-    try {
-      console.log('Calling enhanced AI service...');
-      
-      // Get relevant knowledge for context
-      const relevantKnowledge = getContextualKnowledge(text, 3);
-      
-      const aiResponse = await generateEnhancedAIResponse({
-        message: text,
-        mode: currentMode,
-        chatHistory: getCurrentMessages(),
-        attachments: userMessage.attachments,
-        userName,
-        context: {
-          ...currentConversation.context,
-          speechData: speechResult
-        },
-        knowledgeBase: relevantKnowledge,
-        userPreferences
-      });
-      
-      console.log('Enhanced AI response received:', aiResponse);
-      
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        type: 'ai',
-        text: aiResponse,
-        timestamp: new Date(),
-        mode: currentMode,
-      };
-
-      addMessageToConversation(currentConversation.id, aiMessage);
-      setIsProcessing(false);
-      
-      // Add AI response to knowledge base
-      await addKnowledge(
-        `AI Response - ${AI_MODES.find(m => m.id === currentMode)?.name}`,
-        aiResponse,
-        'research',
-        { mode: currentMode, timestamp: new Date(), userQuery: text }
-      );
-      
-      // Analyze emotional tone and select appropriate voice personality
-      const emotionalTone = analyzeEmotionalTone(aiResponse);
-      const messageType = currentMode === 'business_strategist' ? 'strategic' :
-                         currentMode === 'creative_writer' ? 'creative' :
-                         currentMode === 'research_assistant' ? 'analytical' : 'diplomatic';
-      
-      const appropriatePersonality = getPersonalityForContext(currentMode, messageType);
-      
-      console.log('Speaking with personality:', appropriatePersonality.name, 'for tone:', emotionalTone);
-      
-      await speakWithPersonality(aiResponse, appropriatePersonality, {
-        sentiment: emotionalTone.sentiment,
-        urgency: emotionalTone.intensity > 0.7 ? 'high' : emotionalTone.intensity > 0.4 ? 'medium' : 'low',
-        formality: appropriatePersonality.characteristics.formality
-      });
-      
-    } catch (error) {
-      console.error('Error generating enhanced AI response:', error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        type: 'ai',
-        text: "I apologize, but I encountered an error processing your request. Please ensure your connection is stable and try again.",
-        timestamp: new Date(),
-        mode: currentMode,
-      };
-      addMessageToConversation(currentConversation.id, errorMessage);
-      setIsProcessing(false);
-    }
-  }, [isPlaying, currentMode, userName, currentConversation, pendingAttachments, addMessageToConversation, getCurrentMessages, getContextualKnowledge, addKnowledge, userPreferences, speakWithPersonality, getPersonalityForContext]);
-
+  // Speech Recognition Hook
   const {
     isRecording,
     isProcessing: speechProcessing,
@@ -239,7 +131,6 @@ const EnhancedVoiceChat = () => {
           analysisResult = await analyzeDocument(file);
         }
         
-        // Add to knowledge base
         await addKnowledge(
           file.name,
           analysisResult,
@@ -258,10 +149,8 @@ const EnhancedVoiceChat = () => {
   };
 
   const handleScreenAnalysis = async (analysis: string) => {
-    // Add screen analysis as a user message
     await handleUserMessage(`Screen Analysis: ${analysis}`);
     
-    // Add to knowledge base
     await addKnowledge(
       `Screen Capture - ${new Date().toLocaleTimeString()}`,
       analysis,
@@ -273,10 +162,6 @@ const EnhancedVoiceChat = () => {
   const handleNewConversation = () => {
     const title = `${AI_MODES.find(m => m.id === currentMode)?.name} Session`;
     createNewConversation(title, 'default');
-  };
-
-  const handleSpeechConfigChange = (updates: Partial<SpeechConfig>) => {
-    setSpeechConfig(prev => ({ ...prev, ...updates }));
   };
 
   const handleSettingsClick = () => {
@@ -359,7 +244,7 @@ const EnhancedVoiceChat = () => {
                 <FileUploadArea 
                   onFileUpload={handleFileUpload}
                   pendingAttachments={pendingAttachments}
-                  onRemoveAttachment={(id) => setPendingAttachments(prev => prev.filter(a => a.id !== id))}
+                  onRemoveAttachment={removePendingAttachment}
                   isProcessing={isAnalyzing}
                 />
                 
