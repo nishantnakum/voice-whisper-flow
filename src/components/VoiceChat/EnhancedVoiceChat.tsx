@@ -1,3 +1,4 @@
+
 import React, { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Brain, Settings } from 'lucide-react';
@@ -19,7 +20,9 @@ import { EnhancedConfigPanel } from './EnhancedConfigPanel';
 import { FileUploadArea } from './FileUploadArea';
 import { ConversationHistory } from './ConversationHistory';
 import { ScreenSharePanel } from './ScreenSharePanel';
+import { AIIntelligencePanel } from './AIIntelligencePanel';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const EnhancedVoiceChat = () => {
   console.log('EnhancedVoiceChat component rendering...');
@@ -169,6 +172,10 @@ const EnhancedVoiceChat = () => {
     window.dispatchEvent(new PopStateEvent('popstate'));
   };
 
+  const handleApiKeyRequired = () => {
+    handleSettingsClick();
+  };
+
   const currentAIMode = AI_MODES.find(mode => mode.id === currentMode);
 
   console.log('EnhancedVoiceChat state:', { 
@@ -207,69 +214,85 @@ const EnhancedVoiceChat = () => {
             </div>
           </CardTitle>
           <p className="text-sm text-gray-600">
-            Professional-grade AI assistance with advanced voice capabilities for world leaders
+            Professional-grade AI assistance with advanced voice capabilities and automation
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            <div className="lg:col-span-3 space-y-4">
-              <EnhancedConfigPanel
-                currentMode={currentMode}
-                onModeChange={setCurrentMode}
-                userName={userName}
-                onUserNameChange={setUserName}
-                onNewConversation={handleNewConversation}
-              />
+          <Tabs defaultValue="main" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="main">Main Interface</TabsTrigger>
+              <TabsTrigger value="intelligence">AI Intelligence & Automation</TabsTrigger>
+            </TabsList>
 
-              <AdvancedVoiceControlPanel
-                isRecording={isRecording}
-                isProcessing={speechProcessing || voiceProcessing}
-                audioLevel={audioLevel}
-                detectedLanguage={detectedLanguage}
-                supportedLanguages={supportedLanguages}
-                speechConfig={speechConfig}
-                onSpeechConfigChange={handleSpeechConfigChange}
-                onToggleRecording={toggleRecording}
-                isPlaying={isPlaying}
-                currentPersonality={currentPersonality}
-                voiceQuality={voiceQuality}
-                onPersonalityChange={switchPersonality}
-                onVoiceQualityChange={setVoiceQuality}
-                onStopSpeaking={stopSpeaking}
-                apiKey={voiceApiKey}
-                onApiKeyChange={setVoiceApiKey}
-              />
+            <TabsContent value="main" className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <div className="lg:col-span-3 space-y-4">
+                  <EnhancedConfigPanel
+                    currentMode={currentMode}
+                    onModeChange={setCurrentMode}
+                    userName={userName}
+                    onUserNameChange={setUserName}
+                    onNewConversation={handleNewConversation}
+                  />
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FileUploadArea 
-                  onFileUpload={handleFileUpload}
-                  pendingAttachments={pendingAttachments}
-                  onRemoveAttachment={removePendingAttachment}
-                  isProcessing={isAnalyzing}
-                />
-                
-                <ScreenSharePanel onScreenAnalysis={handleScreenAnalysis} />
+                  <AdvancedVoiceControlPanel
+                    isRecording={isRecording}
+                    isProcessing={speechProcessing || voiceProcessing}
+                    audioLevel={audioLevel}
+                    detectedLanguage={detectedLanguage}
+                    supportedLanguages={supportedLanguages}
+                    speechConfig={speechConfig}
+                    onSpeechConfigChange={handleSpeechConfigChange}
+                    onToggleRecording={toggleRecording}
+                    isPlaying={isPlaying}
+                    currentPersonality={currentPersonality}
+                    voiceQuality={voiceQuality}
+                    onPersonalityChange={switchPersonality}
+                    onVoiceQualityChange={setVoiceQuality}
+                    onStopSpeaking={stopSpeaking}
+                    apiKey={voiceApiKey}
+                    onApiKeyChange={setVoiceApiKey}
+                  />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FileUploadArea 
+                      onFileUpload={handleFileUpload}
+                      pendingAttachments={pendingAttachments}
+                      onRemoveAttachment={removePendingAttachment}
+                      isProcessing={isAnalyzing}
+                    />
+                    
+                    <ScreenSharePanel onScreenAnalysis={handleScreenAnalysis} />
+                  </div>
+
+                  <TranscriptDisplay
+                    isRecording={isRecording}
+                    currentTranscript={currentTranscript}
+                  />
+
+                  <ProcessingIndicator isProcessing={isProcessing || isAnalyzing || speechProcessing || voiceProcessing} />
+
+                  <EnhancedMessageList messages={getCurrentMessages()} />
+                </div>
+
+                <div className="space-y-4">
+                  <ConversationHistory
+                    conversations={conversations}
+                    currentConversation={currentConversation}
+                    onLoadConversation={loadConversation}
+                    onNewConversation={handleNewConversation}
+                  />
+                </div>
               </div>
+            </TabsContent>
 
-              <TranscriptDisplay
-                isRecording={isRecording}
-                currentTranscript={currentTranscript}
+            <TabsContent value="intelligence" className="space-y-6">
+              <AIIntelligencePanel 
+                apiKey={voiceApiKey}
+                onApiKeyRequired={handleApiKeyRequired}
               />
-
-              <ProcessingIndicator isProcessing={isProcessing || isAnalyzing || speechProcessing || voiceProcessing} />
-
-              <EnhancedMessageList messages={getCurrentMessages()} />
-            </div>
-
-            <div className="space-y-4">
-              <ConversationHistory
-                conversations={conversations}
-                currentConversation={currentConversation}
-                onLoadConversation={loadConversation}
-                onNewConversation={handleNewConversation}
-              />
-            </div>
-          </div>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
     </div>
