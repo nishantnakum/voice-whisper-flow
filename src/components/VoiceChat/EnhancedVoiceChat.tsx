@@ -19,6 +19,8 @@ import { EnhancedConfigPanel } from './EnhancedConfigPanel';
 import { FileUploadArea } from './FileUploadArea';
 import { ConversationHistory } from './ConversationHistory';
 import { ScreenSharePanel } from './ScreenSharePanel';
+import { Button } from '@/components/ui/button';
+import { Settings } from 'lucide-react';
 
 const EnhancedVoiceChat = () => {
   console.log('EnhancedVoiceChat component rendering...');
@@ -277,6 +279,11 @@ const EnhancedVoiceChat = () => {
     setSpeechConfig(prev => ({ ...prev, ...updates }));
   };
 
+  const handleSettingsClick = () => {
+    window.history.pushState({}, '', '/settings');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+
   const currentAIMode = AI_MODES.find(mode => mode.id === currentMode);
 
   console.log('EnhancedVoiceChat state:', { 
@@ -302,6 +309,17 @@ const EnhancedVoiceChat = () => {
             <span className="text-sm font-normal text-blue-600 ml-2">
               ({currentAIMode?.name || 'Strategic Mode'})
             </span>
+            <div className="ml-auto">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSettingsClick}
+                className="flex items-center gap-2"
+              >
+                <Settings className="h-4 w-4" />
+                Settings
+              </Button>
+            </div>
           </CardTitle>
           <p className="text-sm text-gray-600">
             Professional-grade AI assistance with advanced voice capabilities for world leaders
